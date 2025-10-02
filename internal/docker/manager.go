@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/LaysDragonB/docker-dev-swap/internal/config"
-	"github.com/LaysDragonB/docker-dev-swap/internal/ssh"
+	"github.com/laysdragon/go-docker-dev-swap/internal/config"
+	"github.com/laysdragon/go-docker-dev-swap/internal/ssh"
 )
 
 type Manager struct {

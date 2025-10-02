@@ -13,13 +13,13 @@
 ## 安裝
 
 ```bash
-go install github.com/LaysDragonB/docker-dev-swap@latest
+go install github.com/laysdragon/go-docker-dev-swap@latest
 ```
 
 或從源碼構建:
 
 ```bash
-git clone https://github.com/LaysDragonB/docker-dev-swap.git
+git clone https://github.com/laysdragon/go-docker-dev-swap.git
 cd docker-dev-swap
 go build -o docker-dev-swap ./cmd/docker-dev-swap
 ```
