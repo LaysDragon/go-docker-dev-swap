@@ -16,8 +16,11 @@ target_service: "api-service"
 # 本地編譯的執行檔路徑
 local_binary: "./bin/api-service"
 
-# 遠端主機上的臨時執行檔路徑
-remote_binary_path: "/tmp/dev-binaries/api-service"
+# 遠端工作目錄（所有臨時檔案存放位置）
+remote_work_dir: "/tmp/dev-binaries"
+
+# 遠端執行檔名稱（會自動附加在 remote_work_dir 下）
+remote_binary_name: "api-service"
 
 # 容器內的執行檔路徑
 container_binary_path: "/app/api-service"

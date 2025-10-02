@@ -141,7 +141,7 @@ func (c *Client) UploadFile(localPath, remotePath string) error {
 }
 
 // UploadDlvIfExists 查找本地 dlv 並上傳到遠端，返回遠端路徑或空字符串
-func (c *Client) UploadDlvIfExists() (string, error) {
+func (c *Client) UploadDlvIfExists(remoteDlvPath string) (string, error) {
 	// 使用 which 查找本地 dlv
 	cmd := exec.Command("which", "dlv")
 	output, err := cmd.Output()
@@ -159,9 +159,6 @@ func (c *Client) UploadDlvIfExists() (string, error) {
 	if _, err := os.Stat(localDlvPath); os.IsNotExist(err) {
 		return "", nil
 	}
-
-	// 定義遠端 dlv 路徑
-	remoteDlvPath := "/tmp/dev-binaries/dlv"
 
 	// 上傳 dlv 到遠端
 	if err := c.UploadFile(localDlvPath, remoteDlvPath); err != nil {

@@ -84,7 +84,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 
 	// 2. 查找並上傳 dlv（如果存在）
 	log.Println("🔍 查找本地 dlv...")
-	remoteDlvPath, err := sshClient.UploadDlvIfExists()
+	remoteDlvPath, err := sshClient.UploadDlvIfExists(cfg.GetRemoteDlvPath())
 	if err != nil {
 		log.Printf("⚠️  上傳 dlv 失敗: %v", err)
 	} else if remoteDlvPath != "" {
@@ -95,10 +95,10 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 
 	// 3. 上傳初始執行檔
 	log.Println("📤 上傳初始執行檔...")
-	if err := sshClient.UploadFile(cfg.LocalBinary, cfg.RemoteBinaryPath); err != nil {
+	if err := sshClient.UploadFile(cfg.LocalBinary, cfg.GetRemoteBinaryPath()); err != nil {
 		return fmt.Errorf("上傳執行檔失敗: %w", err)
 	}
-	if err := sshClient.CreateScript(fmt.Sprintf("%s\nsh ./entry.sh", cfg.InitialScripts), "/tmp/dev-binaries/init.sh"); err != nil {
+	if err := sshClient.CreateScript(fmt.Sprintf("%s\nsh ./entry.sh", cfg.InitialScripts), cfg.GetRemoteInitScriptPath()); err != nil {
 		return fmt.Errorf("上傳初始腳本失敗: %w", err)
 	}
 
@@ -158,7 +158,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 
 		// 上傳新檔案
 		log.Println("📤 上傳新執行檔...")
-		if err := sshClient.UploadFile(cfg.LocalBinary, cfg.RemoteBinaryPath); err != nil {
+		if err := sshClient.UploadFile(cfg.LocalBinary, cfg.GetRemoteBinaryPath()); err != nil {
 			log.Printf("❌ 上傳失敗: %v", err)
 			return
 		}

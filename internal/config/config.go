@@ -12,7 +12,8 @@ type Config struct {
 	ComposeDir          string     `yaml:"compose_dir"`
 	TargetService       string     `yaml:"target_service"`
 	LocalBinary         string     `yaml:"local_binary"`
-	RemoteBinaryPath    string     `yaml:"remote_binary_path"`
+	RemoteWorkDir       string     `yaml:"remote_work_dir"`        // 遠端工作目錄
+	RemoteBinaryName    string     `yaml:"remote_binary_name"`     // 遠端執行檔名稱
 	ContainerBinaryPath string     `yaml:"container_binary_path"`
 	DebuggerPort        int        `yaml:"debugger_port"`
 	ExtraPorts          []int      `yaml:"extra_ports"`
@@ -34,6 +35,26 @@ type DlvConfig struct {
 	Args    string `yaml:"args"`
 }
 
+// GetRemoteBinaryPath 返回完整的遠端執行檔路徑
+func (c *Config) GetRemoteBinaryPath() string {
+	return fmt.Sprintf("%s/%s", c.RemoteWorkDir, c.RemoteBinaryName)
+}
+
+// GetRemoteDlvPath 返回完整的遠端 dlv 路徑
+func (c *Config) GetRemoteDlvPath() string {
+	return fmt.Sprintf("%s/dlv", c.RemoteWorkDir)
+}
+
+// GetRemoteInitScriptPath 返回完整的遠端初始化腳本路徑
+func (c *Config) GetRemoteInitScriptPath() string {
+	return fmt.Sprintf("%s/init.sh", c.RemoteWorkDir)
+}
+
+// GetRemoteEntryScriptPath 返回完整的遠端入口腳本路徑
+func (c *Config) GetRemoteEntryScriptPath() string {
+	return fmt.Sprintf("%s/entry.sh", c.RemoteWorkDir)
+}
+
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -52,8 +73,11 @@ func Load(path string) (*Config, error) {
 	if cfg.DebuggerPort == 0 {
 		cfg.DebuggerPort = 2345
 	}
-	if cfg.RemoteBinaryPath == "" {
-		cfg.RemoteBinaryPath = "/tmp/dev-binary"
+	if cfg.RemoteWorkDir == "" {
+		cfg.RemoteWorkDir = "/tmp/dev-binaries"
+	}
+	if cfg.RemoteBinaryName == "" {
+		cfg.RemoteBinaryName = "service"
 	}
 
 	return &cfg, nil
