@@ -193,9 +193,11 @@ func (c *Client) CreateTunnel(localPort, remotePort int) (*Tunnel, error) {
 			if err != nil {
 				return
 			}
+			fmt.Printf("接受本地連接: %s\n", localConn.RemoteAddr().String())
 
 			go func(local net.Conn) {
 				defer local.Close()
+				defer fmt.Printf("關閉本地連接: %s\n", local.RemoteAddr().String())
 
 				remote, err := c.client.Dial("tcp", fmt.Sprintf("localhost:%d", remotePort))
 				if err != nil {
