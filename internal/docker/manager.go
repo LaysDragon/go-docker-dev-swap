@@ -203,7 +203,7 @@ func (m *Manager) RestartContainer(name string) error {
 }
 
 func (m *Manager) RemoveDevContainer(name string) error {
-	cmd := fmt.Sprintf("docker rm -f %s", name)
+	cmd := fmt.Sprintf("sudo docker rm -f %s", name)
 	_, err := m.ssh.Execute(cmd)
 	return err
 }
