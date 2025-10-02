@@ -150,10 +150,10 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 
 	// 新增執行檔掛載
 	cmdParts = append(cmdParts, fmt.Sprintf("-v %s:%s",
-		cfg.RemoteBinaryPath, cfg.ContainerBinaryPath))
+		cfg.GetRemoteBinaryPath(), cfg.ContainerBinaryPath))
 
-	cmdParts = append(cmdParts, "-v /tmp/dev-binaries/entry.sh:/app/entry.sh")
-	cmdParts = append(cmdParts, "-v /tmp/dev-binaries/init.sh:/app/init.sh")
+	cmdParts = append(cmdParts, fmt.Sprintf("-v %s:/app/entry.sh", cfg.GetRemoteEntryScriptPath()))
+	cmdParts = append(cmdParts, fmt.Sprintf("-v %s:/app/init.sh", cfg.GetRemoteInitScriptPath()))
 
 	// 如果有 dlv，也掛載進去
 	if remoteDlvPath != "" {
@@ -207,7 +207,7 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 	}
 	cmdParts = append(cmdParts, "sh /app/init.sh")
 
-	if err := m.ssh.CreateScript(strings.Join(entryParts, " "), "/tmp/dev-binaries/entry.sh"); err != nil {
+	if err := m.ssh.CreateScript(strings.Join(entryParts, " "), cfg.GetRemoteEntryScriptPath()); err != nil {
 		return nil, fmt.Errorf("上傳入口腳本失敗: %w", err)
 	}
 
