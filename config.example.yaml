@@ -1,0 +1,37 @@
+# 遠端主機配置
+remote_host:
+  host: "192.168.1.100"
+  port: 22
+  user: "developer"
+  # 選擇使用密碼或金鑰認證
+  password: "your-password"
+  # key_file: "/home/user/.ssh/id_rsa"
+
+# Docker Compose 應用目錄
+compose_dir: "/opt/microservices/my-app"
+
+# 目標服務名稱
+target_service: "api-service"
+
+# 本地編譯的執行檔路徑
+local_binary: "./bin/api-service"
+
+# 遠端主機上的臨時執行檔路徑
+remote_binary_path: "/tmp/dev-binaries/api-service"
+
+# 容器內的執行檔路徑
+container_binary_path: "/app/api-service"
+
+# Debugger 端口 (本地監聽端口)
+debugger_port: 2345
+
+# 額外需要暴露的端口
+extra_ports:
+  - 8080
+  - 9090
+
+# Delve Debugger 配置
+dlv_config:
+  enabled: true
+  port: 2345
+  args: "--log --log-output=debugger,rpc"
