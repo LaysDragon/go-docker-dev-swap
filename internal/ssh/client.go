@@ -5,7 +5,9 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/LaysDragonB/docker-dev-swap/internal/config"
@@ -136,6 +138,37 @@ func (c *Client) UploadFile(localPath, remotePath string) error {
 	}
 
 	return nil
+}
+
+// UploadDlvIfExists 查找本地 dlv 並上傳到遠端，返回遠端路徑或空字符串
+func (c *Client) UploadDlvIfExists() (string, error) {
+	// 使用 which 查找本地 dlv
+	cmd := exec.Command("which", "dlv")
+	output, err := cmd.Output()
+	if err != nil {
+		// 找不到 dlv，返回空字符串表示沒有 dlv
+		return "", nil
+	}
+
+	localDlvPath := strings.TrimSpace(string(output))
+	if localDlvPath == "" {
+		return "", nil
+	}
+
+	// 檢查文件是否真的存在
+	if _, err := os.Stat(localDlvPath); os.IsNotExist(err) {
+		return "", nil
+	}
+
+	// 定義遠端 dlv 路徑
+	remoteDlvPath := "/tmp/dev-binaries/dlv"
+
+	// 上傳 dlv 到遠端
+	if err := c.UploadFile(localDlvPath, remoteDlvPath); err != nil {
+		return "", fmt.Errorf("上傳 dlv 失敗: %w", err)
+	}
+
+	return remoteDlvPath, nil
 }
 
 type Tunnel struct {

@@ -130,7 +130,7 @@ func (m *Manager) StopContainer(serviceName string) error {
 	return err
 }
 
-func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Config) (*DevContainer, error) {
+func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Config, remoteDlvPath string) (*DevContainer, error) {
 	devName := fmt.Sprintf("%s-dev", original.Name)
 
 	// 構建 docker run 命令
@@ -154,6 +154,11 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 
 	cmdParts = append(cmdParts, "-v /tmp/dev-binaries/entry.sh:/app/entry.sh")
 	cmdParts = append(cmdParts, "-v /tmp/dev-binaries/init.sh:/app/init.sh")
+
+	// 如果有 dlv，也掛載進去
+	if remoteDlvPath != "" {
+		cmdParts = append(cmdParts, fmt.Sprintf("-v %s:/usr/local/bin/dlv", remoteDlvPath))
+	}
 
 	// 端口映射
 	if cfg.DlvConfig.Enabled {
