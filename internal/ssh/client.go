@@ -64,6 +64,14 @@ func (c *Client) Close() error {
 	return c.client.Close()
 }
 
+func (c *Client) CreateSession() (*ssh.Session, error) {
+	session, err := c.client.NewSession()
+	if err != nil {
+		return nil, fmt.Errorf("建立 SSH session 失敗: %w", err)
+	}
+	return session, nil
+}
+
 func (c *Client) CreateScript(script, path string) error {
 	if _, err := c.Execute(fmt.Sprintf("echo -e \"%s\" > %s", script, path)); err != nil {
 		return fmt.Errorf("建立腳本 %s 失敗: %w", path, err)

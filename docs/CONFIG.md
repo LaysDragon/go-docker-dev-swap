@@ -48,6 +48,7 @@ Docker Dev Swap 使用 [Viper](https://github.com/spf13/viper) 作為配置管�
 | `dlv_config.port` | dlv 端口 | `2345` |
 | `dlv_config.local_path` | 本地 dlv 路徑（空則自動搜尋） | `""` |
 | `dlv_config.args` | dlv 額外參數 | `""` |
+| `log_file` | 本地日誌文件路徑 | `""` (不寫入文件) |
 
 ## 環境變數支持
 

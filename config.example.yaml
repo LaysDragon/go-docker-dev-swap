@@ -48,6 +48,12 @@ local_binary: "./bin/api-service"            # [必要] 本地二進制文件路
 #   apk add --no-cache libc6-compat
 #   echo "容器初始化完成"
 
+# 日誌文件路徑（將容器日誌寫入本地文件）
+# log_file: ""                               # [可選] 默認: "" (不寫入文件)
+# 範例：
+# log_file: "./logs/container.log"
+# log_file: "/tmp/docker-dev-swap/app.log"
+
 # Delve Debugger 配置
 # dlv_config:
 #   enabled: true                            # [可選] 默認: true

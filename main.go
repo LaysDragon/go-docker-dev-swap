@@ -13,6 +13,7 @@ import (
 	"github.com/LaysDragonB/docker-dev-swap/internal/config"
 	"github.com/LaysDragonB/docker-dev-swap/internal/dlv"
 	"github.com/LaysDragonB/docker-dev-swap/internal/docker"
+	"github.com/LaysDragonB/docker-dev-swap/internal/logger"
 	"github.com/LaysDragonB/docker-dev-swap/internal/ssh"
 	"github.com/LaysDragonB/docker-dev-swap/internal/watcher"
 )
@@ -88,14 +89,14 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 	var remoteDlvPath string
 	if cfg.DlvConfig.Enabled {
 		log.Println("🔍 查找本地 dlv...")
-		
+
 		// 查找 dlv
 		localDlvPath, err := dlv.FindLocal(cfg.DlvConfig.LocalPath)
 		if err != nil {
 			log.Printf("⚠️  查找 dlv 失敗: %v", err)
 		} else if localDlvPath != "" {
 			log.Printf("📍 找到 dlv: %s", localDlvPath)
-			
+
 			// 上傳 dlv
 			log.Println("📤 上傳 dlv 到遠端...")
 			remoteDlvPath = cfg.GetRemoteDlvPath()
@@ -143,17 +144,17 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 		if strings.Contains(err.Error(), "發現殘留的開發容器") {
 			log.Println("⚠️  發現殘留的開發容器")
 			log.Print("是否要清理殘留容器？(y/N): ")
-			
+
 			var response string
 			fmt.Scanln(&response)
-			
+
 			if strings.ToLower(strings.TrimSpace(response)) == "y" {
 				log.Println("🧹 清理殘留容器...")
 				if err := dockerMgr.RemoveDevContainerIfExists(cfg.GetDevContainerName()); err != nil {
 					return fmt.Errorf("清理殘留容器失敗: %w", err)
 				}
 				log.Println("✅ 殘留容器已清理")
-				
+
 				// 重試建立開發容器
 				log.Println("🔧 重新建立開發容器...")
 				devContainer, err = dockerMgr.CreateDevContainer(originalContainer, cfg, remoteDlvPath)
@@ -220,9 +221,24 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 		return fmt.Errorf("啟動檔案監控失敗: %w", err)
 	}
 
+	// 9. 啟動日誌監控
+	log.Println("📝 啟動容器日誌監控...")
+	if cfg.LogFile != "" {
+		log.Printf("📄 日誌將寫入文件: %s", cfg.LogFile)
+	}
+
+	logFollower := logger.NewFollower(sshClient, devContainer.Name, cfg.LogFile)
+	go func() {
+		if err := logFollower.Start(ctx); err != nil && err != context.Canceled {
+			log.Printf("⚠️  日誌監控停止: %v", err)
+		}
+	}()
+
 	log.Println("🎉 開發環境已就緒！")
 	log.Println("   - 按 Ctrl+C 退出並清理")
 	log.Println("   - 修改並編譯二進制檔案會自動部署")
+	log.Println("   - 容器日誌將顯示在下方")
+	log.Println("==========================================")
 
 	// 等待退出信號
 	<-ctx.Done()
