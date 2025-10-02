@@ -1,40 +1,64 @@
+# ============================================
+# Docker Dev Swap 配置文件範例
+# ============================================
+# 複製此文件為 config.yaml 並修改為你的設定
+
+# ============================================
+# 必要配置項
+# ============================================
+
 # 遠端主機配置
 remote_host:
-  host: "192.168.1.100"
-  port: 22
-  user: "developer"
-  # 選擇使用密碼或金鑰認證
-  password: "your-password"
-  # key_file: "/home/user/.ssh/id_rsa"
+  host: "192.168.1.100"                      # [必要] 遠端主機地址
+  user: "developer"                          # [必要] SSH 用戶名
+  
+  # 認證方式：密碼或金鑰二選一
+  password: "your-password"                  # [可選] SSH 密碼
+  # key_file: "/home/user/.ssh/id_rsa"       # [可選] SSH 私鑰路徑
+  
+  # port: 22                                 # [可選] SSH 端口 (默認: 22)
 
 # Docker Compose 應用目錄
-compose_dir: "/opt/microservices/my-app"
+compose_dir: "/opt/microservices/my-app"     # [必要] docker-compose.yml 所在目錄
 
 # 目標服務名稱
-target_service: "api-service"
+target_service: "api-service"                # [必要] docker-compose 中的服務名稱
 
 # 本地編譯的執行檔路徑
-local_binary: "./bin/api-service"
+local_binary: "./bin/api-service"            # [必要] 本地二進制文件路徑
+
+# ============================================
+# 可選配置項（以下都有預設值，可以不設定）
+# ============================================
 
 # 遠端工作目錄（所有臨時檔案存放位置）
-remote_work_dir: "/tmp/dev-binaries"
+# remote_work_dir: "/tmp/dev-binaries"       # [可選] 默認: /tmp/dev-binaries
 
 # 遠端執行檔名稱（會自動附加在 remote_work_dir 下）
-remote_binary_name: "api-service"
+# remote_binary_name: "service"              # [可選] 默認: service
 
 # 容器內的執行檔路徑
-container_binary_path: "/app/api-service"
+# container_binary_path: "/app/service"      # [可選] 默認: /app/service
 
 # Debugger 端口 (本地監聽端口)
-debugger_port: 2345
+# debugger_port: 2345                        # [可選] 默認: 2345
 
 # 額外需要暴露的端口
-extra_ports:
-  - 8080
-  - 9090
+# extra_ports: []                            # [可選] 默認: []
+#   - 8080
+#   - 9090
+
+# 容器啟動前執行的初始化腳本（用於安裝依賴等）
+# initial_scripts: ""                        # [可選] 默認: ""
+# 範例：
+# initial_scripts: |
+#   apk add --no-cache libc6-compat
+#   echo "容器初始化完成"
 
 # Delve Debugger 配置
-dlv_config:
-  enabled: true
-  port: 2345
-  args: "--log --log-output=debugger,rpc"
+# dlv_config:
+#   enabled: true                            # [可選] 默認: true
+#   port: 2345                               # [可選] 默認: 2345
+#   args: ""                                 # [可選] 默認: ""
+#   # 可用參數示例：
+#   # args: "--log --log-output=debugger,rpc"
