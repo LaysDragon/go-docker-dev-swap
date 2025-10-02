@@ -87,6 +87,9 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 	if err := sshClient.UploadFile(cfg.LocalBinary, cfg.RemoteBinaryPath); err != nil {
 		return fmt.Errorf("上傳執行檔失敗: %w", err)
 	}
+	if err := sshClient.CreateScript(fmt.Sprintf("%s\nsh ./entry.sh", cfg.InitialScripts), "/tmp/dev-binaries/init.sh"); err != nil {
+		return fmt.Errorf("上傳初始腳本失敗: %w", err)
+	}
 
 	// 3. 停止原始容器
 	log.Println("🛑 停止原始容器...")

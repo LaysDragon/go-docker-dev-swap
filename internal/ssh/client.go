@@ -64,6 +64,17 @@ func (c *Client) Close() error {
 	return c.client.Close()
 }
 
+func (c *Client) CreateScript(script, path string) error {
+	if _, err := c.Execute(fmt.Sprintf("echo -e \"%s\" > %s", script, path)); err != nil {
+		return fmt.Errorf("建立腳本 %s 失敗: %w", path, err)
+	}
+
+	if _, err := c.Execute(fmt.Sprintf("chmod +x %s", path)); err != nil {
+		return fmt.Errorf("賦予腳本 %s 執行權限失敗: %w", path, err)
+	}
+	return nil
+}
+
 func (c *Client) Execute(command string) (string, error) {
 	session, err := c.client.NewSession()
 	if err != nil {

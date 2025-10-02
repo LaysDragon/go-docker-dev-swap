@@ -144,6 +144,9 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 	cmdParts = append(cmdParts, fmt.Sprintf("-v %s:%s",
 		cfg.RemoteBinaryPath, cfg.ContainerBinaryPath))
 
+	cmdParts = append(cmdParts, "-v /tmp/dev-binaries/entry.sh:/app/entry.sh")
+	cmdParts = append(cmdParts, "-v /tmp/dev-binaries/init.sh:/app/init.sh")
+
 	// 端口映射
 	if cfg.DlvConfig.Enabled {
 		cmdParts = append(cmdParts, fmt.Sprintf("-p %d:%d",
@@ -169,16 +172,24 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 	// 映像
 	cmdParts = append(cmdParts, original.Image)
 
+	var entryParts []string
 	// 命令 (使用 dlv 或直接執行)
 	if cfg.DlvConfig.Enabled {
 		dlvCmd := fmt.Sprintf("dlv exec %s --headless --listen=:%d --api-version=2 --accept-multiclient %s",
 			cfg.ContainerBinaryPath, cfg.DlvConfig.Port, cfg.DlvConfig.Args)
-		cmdParts = append(cmdParts, fmt.Sprintf("sh -c '%s'", dlvCmd))
+		//entryParts = append(entryParts, fmt.Sprintf("sh -c '%s'", dlvCmd))
+		entryParts = append(entryParts, fmt.Sprintf("sh -c '%s'", dlvCmd))
 	} else {
-		cmdParts = append(cmdParts, cfg.ContainerBinaryPath)
+		entryParts = append(entryParts, cfg.ContainerBinaryPath)
+	}
+	cmdParts = append(cmdParts, "sh /app/init.sh")
+
+	if err := m.ssh.CreateScript(strings.Join(entryParts, " "), "/tmp/dev-binaries/entry.sh"); err != nil {
+		return nil, fmt.Errorf("上傳入口腳本失敗: %w", err)
 	}
 
 	cmd := strings.Join(cmdParts, " ")
+	fmt.Printf("執行命令: %s\n", cmd)
 	output, err := m.ssh.Execute(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("建立開發容器失敗: %w, output: %s", err, output)
