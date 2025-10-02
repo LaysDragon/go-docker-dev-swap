@@ -110,6 +110,14 @@ func (c *Client) UploadFile(localPath, remotePath string) error {
 	}
 	defer localFile.Close()
 
+	// 檢查遠端檔案是否存在，如果存在則刪除
+	if _, err := sftpClient.Stat(remotePath); err == nil {
+		// 檔案存在，先刪除
+		if err := sftpClient.Remove(remotePath); err != nil {
+			return fmt.Errorf("刪除已存在的遠端檔案失敗: %w", err)
+		}
+	}
+
 	// 建立遠端檔案
 	remoteFile, err := sftpClient.Create(remotePath)
 	if err != nil {
