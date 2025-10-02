@@ -197,7 +197,8 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 	var entryParts []string
 	// 命令 (使用 dlv 或直接執行)
 	if cfg.DlvConfig.Enabled {
-		dlvCmd := fmt.Sprintf("./dlv exec %s --headless --listen=:%d --api-version=2 --accept-multiclient %s",
+		// 需要 continue 不然需要連線兩次應用才會正式開始執行，原因不明
+		dlvCmd := fmt.Sprintf("./dlv exec %s --headless --listen=:%d --api-version=2 --accept-multiclient --continue %s",
 			cfg.ContainerBinaryPath, cfg.DlvConfig.Port, cfg.DlvConfig.Args)
 		entryParts = append(entryParts, dlvCmd)
 		//entryParts = append(entryParts, fmt.Sprintf("sh -c '%s'", dlvCmd))
