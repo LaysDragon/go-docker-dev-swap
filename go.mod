@@ -1,4 +1,4 @@
-module github.com/LaysDragonB/docker-dev-swap
+module github.com/laysdragon/go-docker-dev-swap
 
 go 1.23.0
 
