@@ -130,8 +130,72 @@ func (m *Manager) StopContainer(serviceName string) error {
 	return err
 }
 
+// CheckDevContainerExists 檢查開發容器是否已存在並驗證是否為本工具創建的
+func (m *Manager) CheckDevContainerExists(devName string) (exists bool, isDevSwap bool, containerID string, err error) {
+	// 檢查容器是否存在
+	cmd := fmt.Sprintf("sudo docker ps -a --filter name=^/%s$ --format '{{.ID}}'", devName)
+	output, err := m.ssh.Execute(cmd)
+	if err != nil {
+		return false, false, "", fmt.Errorf("檢查容器失敗: %w", err)
+	}
+
+	containerID = strings.TrimSpace(output)
+	if containerID == "" {
+		return false, false, "", nil
+	}
+
+	// 容器存在，檢查是否有 dev-swap=true 標籤
+	cmd = fmt.Sprintf("sudo docker inspect %s --format '{{index .Config.Labels \"dev-swap\"}}'" , containerID)
+	output, err = m.ssh.Execute(cmd)
+	if err != nil {
+		return true, false, containerID, nil
+	}
+
+	label := strings.TrimSpace(output)
+	return true, label == "true", containerID, nil
+}
+
+// RemoveDevContainerIfExists 移除已存在的開發容器（如果存在且為本工具創建）
+func (m *Manager) RemoveDevContainerIfExists(devName string) error {
+	exists, isDevSwap, containerID, err := m.CheckDevContainerExists(devName)
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		return nil // 容器不存在，無需清理
+	}
+
+	if !isDevSwap {
+		return fmt.Errorf("容器 %s 存在但不是由 dev-swap 創建的，請手動處理", devName)
+	}
+
+	// 移除容器
+	cmd := fmt.Sprintf("sudo docker rm -f %s", containerID)
+	_, err = m.ssh.Execute(cmd)
+	if err != nil {
+		return fmt.Errorf("移除殘留容器失敗: %w", err)
+	}
+
+	return nil
+}
+
 func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Config, remoteDlvPath string) (*DevContainer, error) {
-	devName := fmt.Sprintf("%s-dev", original.Name)
+	devName := cfg.GetDevContainerName()
+
+	// 檢查是否有殘留的開發容器
+	exists, isDevSwap, containerID, err := m.CheckDevContainerExists(devName)
+	if err != nil {
+		return nil, fmt.Errorf("檢查容器狀態失敗: %w", err)
+	}
+
+	if exists {
+		if isDevSwap {
+			return nil, fmt.Errorf("發現殘留的開發容器 (ID: %s)，請使用清理選項", containerID)
+		} else {
+			return nil, fmt.Errorf("容器名稱 %s 已被使用但不是由 dev-swap 創建，請手動處理", devName)
+		}
+	}
 
 	// 構建 docker run 命令
 	var cmdParts []string

@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/LaysDragonB/docker-dev-swap/internal/config"
@@ -138,7 +139,33 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 	log.Println("🔧 建立開發容器...")
 	devContainer, err := dockerMgr.CreateDevContainer(originalContainer, cfg, remoteDlvPath)
 	if err != nil {
-		return fmt.Errorf("建立開發容器失敗: %w", err)
+		// 檢查是否為容器名稱衝突錯誤
+		if strings.Contains(err.Error(), "發現殘留的開發容器") {
+			log.Println("⚠️  發現殘留的開發容器")
+			log.Print("是否要清理殘留容器？(y/N): ")
+			
+			var response string
+			fmt.Scanln(&response)
+			
+			if strings.ToLower(strings.TrimSpace(response)) == "y" {
+				log.Println("🧹 清理殘留容器...")
+				if err := dockerMgr.RemoveDevContainerIfExists(cfg.GetDevContainerName()); err != nil {
+					return fmt.Errorf("清理殘留容器失敗: %w", err)
+				}
+				log.Println("✅ 殘留容器已清理")
+				
+				// 重試建立開發容器
+				log.Println("🔧 重新建立開發容器...")
+				devContainer, err = dockerMgr.CreateDevContainer(originalContainer, cfg, remoteDlvPath)
+				if err != nil {
+					return fmt.Errorf("建立開發容器失敗: %w", err)
+				}
+			} else {
+				return fmt.Errorf("用戶取消操作")
+			}
+		} else {
+			return fmt.Errorf("建立開發容器失敗: %w", err)
+		}
 	}
 
 	// 確保退出時清理開發容器
