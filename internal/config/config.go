@@ -56,6 +56,11 @@ func (c *Config) GetRemoteEntryScriptPath() string {
 	return fmt.Sprintf("%s/entry.sh", c.RemoteWorkDir)
 }
 
+// GetDevContainerName 返回開發容器名稱
+func (c *Config) GetDevContainerName() string {
+	return fmt.Sprintf("%s-dev", c.TargetService)
+}
+
 func Load(path string) (*Config, error) {
 	v := viper.New()
 
