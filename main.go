@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/LaysDragonB/docker-dev-swap/internal/config"
+	"github.com/LaysDragonB/docker-dev-swap/internal/dlv"
 	"github.com/LaysDragonB/docker-dev-swap/internal/docker"
 	"github.com/LaysDragonB/docker-dev-swap/internal/ssh"
 	"github.com/LaysDragonB/docker-dev-swap/internal/watcher"
@@ -82,15 +83,30 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 		return fmt.Errorf("獲取容器配置失敗: %w", err)
 	}
 
-	// 2. 查找並上傳 dlv（如果存在）
-	log.Println("🔍 查找本地 dlv...")
-	remoteDlvPath, err := sshClient.UploadDlvIfExists(cfg.GetRemoteDlvPath())
-	if err != nil {
-		log.Printf("⚠️  上傳 dlv 失敗: %v", err)
-	} else if remoteDlvPath != "" {
-		log.Printf("✅ dlv 已上傳到遠端: %s", remoteDlvPath)
-	} else {
-		log.Println("⚠️  本地未找到 dlv，將使用容器內的 dlv（如果有）")
+	// 2. 查找並上傳 dlv（如果啟用且配置）
+	var remoteDlvPath string
+	if cfg.DlvConfig.Enabled {
+		log.Println("🔍 查找本地 dlv...")
+		
+		// 查找 dlv
+		localDlvPath, err := dlv.FindLocal(cfg.DlvConfig.LocalPath)
+		if err != nil {
+			log.Printf("⚠️  查找 dlv 失敗: %v", err)
+		} else if localDlvPath != "" {
+			log.Printf("📍 找到 dlv: %s", localDlvPath)
+			
+			// 上傳 dlv
+			log.Println("📤 上傳 dlv 到遠端...")
+			remoteDlvPath = cfg.GetRemoteDlvPath()
+			if err := sshClient.UploadFile(localDlvPath, remoteDlvPath); err != nil {
+				log.Printf("⚠️  上傳 dlv 失敗: %v", err)
+				remoteDlvPath = "" // 重置，使用容器內的 dlv
+			} else {
+				log.Printf("✅ dlv 已上傳到遠端: %s", remoteDlvPath)
+			}
+		} else {
+			log.Println("⚠️  本地未找到 dlv，將使用容器內的 dlv（如果有）")
+		}
 	}
 
 	// 3. 上傳初始執行檔

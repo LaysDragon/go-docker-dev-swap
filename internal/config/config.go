@@ -30,9 +30,10 @@ type RemoteHost struct {
 }
 
 type DlvConfig struct {
-	Enabled bool   `mapstructure:"enabled"`
-	Port    int    `mapstructure:"port"`
-	Args    string `mapstructure:"args"`
+	Enabled   bool   `mapstructure:"enabled"`
+	Port      int    `mapstructure:"port"`
+	Args      string `mapstructure:"args"`
+	LocalPath string `mapstructure:"local_path"` // 本地 dlv 路徑，為空則自動搜尋
 }
 
 // GetRemoteBinaryPath 返回完整的遠端執行檔路徑
@@ -114,6 +115,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("dlv_config.enabled", true)
 	v.SetDefault("dlv_config.port", 2345)
 	v.SetDefault("dlv_config.args", "")
+	v.SetDefault("dlv_config.local_path", "") // 空字符串表示自動搜尋
 
 	// 初始化腳本預設值 (空字符串表示不執行)
 	v.SetDefault("initial_scripts", "")
