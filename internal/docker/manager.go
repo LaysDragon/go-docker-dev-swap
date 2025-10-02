@@ -91,6 +91,14 @@ func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, erro
 		if wd, ok := configData["WorkingDir"].(string); ok {
 			cfg.WorkingDir = wd
 		}
+		// 解析 Labels
+		if labels, ok := configData["Labels"].(map[string]interface{}); ok {
+			for k, v := range labels {
+				if vStr, ok := v.(string); ok {
+					cfg.Labels[k] = vStr
+				}
+			}
+		}
 	}
 
 	// 解析掛載
@@ -166,7 +174,16 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 		cmdParts = append(cmdParts, fmt.Sprintf("-w %s", original.WorkingDir))
 	}
 
-	// 標籤
+	// 繼承原始容器的標籤
+	for k, v := range original.Labels {
+		// 跳過某些可能會造成衝突的標籤
+		if strings.HasPrefix(k, "com.docker.compose") {
+			continue
+		}
+		cmdParts = append(cmdParts, fmt.Sprintf("-l '%s=%s'", k, v))
+	}
+
+	// 添加開發容器標籤
 	cmdParts = append(cmdParts, "-l dev-swap=true")
 
 	// 映像
@@ -177,8 +194,8 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 	if cfg.DlvConfig.Enabled {
 		dlvCmd := fmt.Sprintf("dlv exec %s --headless --listen=:%d --api-version=2 --accept-multiclient %s",
 			cfg.ContainerBinaryPath, cfg.DlvConfig.Port, cfg.DlvConfig.Args)
-		//entryParts = append(entryParts, fmt.Sprintf("sh -c '%s'", dlvCmd))
 		entryParts = append(entryParts, fmt.Sprintf("sh -c '%s'", dlvCmd))
+		// entryParts = append(entryParts, fmt.Sprintf("sh -c '%s'", dlvCmd))
 	} else {
 		entryParts = append(entryParts, cfg.ContainerBinaryPath)
 	}
