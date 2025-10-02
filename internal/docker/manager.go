@@ -40,7 +40,7 @@ func NewManager(sshClient *ssh.Client, cfg *config.Config) *Manager {
 
 func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, error) {
 	// 獲取容器 ID
-	cmd := fmt.Sprintf("cd %s && sudo docker compose ps -q %s", m.config.ComposeDir, serviceName)
+	cmd := fmt.Sprintf("cd %s && sudo docker compose ps -q %s -a", m.config.ComposeDir, serviceName)
 	containerID, err := m.ssh.Execute(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("獲取容器 ID 失敗: %w", err)
