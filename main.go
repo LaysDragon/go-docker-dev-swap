@@ -10,12 +10,12 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/LaysDragonB/docker-dev-swap/internal/config"
-	"github.com/LaysDragonB/docker-dev-swap/internal/dlv"
-	"github.com/LaysDragonB/docker-dev-swap/internal/docker"
-	"github.com/LaysDragonB/docker-dev-swap/internal/logger"
-	"github.com/LaysDragonB/docker-dev-swap/internal/ssh"
-	"github.com/LaysDragonB/docker-dev-swap/internal/watcher"
+	"github.com/laysdragon/go-docker-dev-swap/internal/config"
+	"github.com/laysdragon/go-docker-dev-swap/internal/dlv"
+	"github.com/laysdragon/go-docker-dev-swap/internal/docker"
+	"github.com/laysdragon/go-docker-dev-swap/internal/logger"
+	"github.com/laysdragon/go-docker-dev-swap/internal/ssh"
+	"github.com/laysdragon/go-docker-dev-swap/internal/watcher"
 )
 
 var (

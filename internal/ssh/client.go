@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/LaysDragonB/docker-dev-swap/internal/config"
+	"github.com/laysdragon/go-docker-dev-swap/internal/config"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )

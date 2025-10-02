@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/LaysDragonB/docker-dev-swap/internal/ssh"
+	"github.com/laysdragon/go-docker-dev-swap/internal/ssh"
 )
 
 type Follower struct {
