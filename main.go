@@ -82,7 +82,18 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 		return fmt.Errorf("獲取容器配置失敗: %w", err)
 	}
 
-	// 2. 上傳初始執行檔
+	// 2. 查找並上傳 dlv（如果存在）
+	log.Println("🔍 查找本地 dlv...")
+	remoteDlvPath, err := sshClient.UploadDlvIfExists()
+	if err != nil {
+		log.Printf("⚠️  上傳 dlv 失敗: %v", err)
+	} else if remoteDlvPath != "" {
+		log.Printf("✅ dlv 已上傳到遠端: %s", remoteDlvPath)
+	} else {
+		log.Println("⚠️  本地未找到 dlv，將使用容器內的 dlv（如果有）")
+	}
+
+	// 3. 上傳初始執行檔
 	log.Println("📤 上傳初始執行檔...")
 	if err := sshClient.UploadFile(cfg.LocalBinary, cfg.RemoteBinaryPath); err != nil {
 		return fmt.Errorf("上傳執行檔失敗: %w", err)
@@ -91,7 +102,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 		return fmt.Errorf("上傳初始腳本失敗: %w", err)
 	}
 
-	// 3. 停止原始容器
+	// 4. 停止原始容器
 	log.Println("🛑 停止原始容器...")
 	if err := dockerMgr.StopContainer(cfg.TargetService); err != nil {
 		return fmt.Errorf("停止容器失敗: %w", err)
@@ -107,9 +118,9 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 		}
 	}()
 
-	// 4. 建立開發容器
+	// 5. 建立開發容器
 	log.Println("🔧 建立開發容器...")
-	devContainer, err := dockerMgr.CreateDevContainer(originalContainer, cfg)
+	devContainer, err := dockerMgr.CreateDevContainer(originalContainer, cfg, remoteDlvPath)
 	if err != nil {
 		return fmt.Errorf("建立開發容器失敗: %w", err)
 	}
@@ -124,13 +135,13 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 		}
 	}()
 
-	// 5. 啟動開發容器
+	// 6. 啟動開發容器
 	log.Println("▶️  啟動開發容器...")
 	if err := dockerMgr.StartContainer(devContainer.Name); err != nil {
 		return fmt.Errorf("啟動開發容器失敗: %w", err)
 	}
 
-	// 6. 建立 SSH Tunnel (用於 Debugger)
+	// 7. 建立 SSH Tunnel (用於 Debugger)
 	log.Println("🔌 建立 SSH Tunnel...")
 	tunnel, err := sshClient.CreateTunnel(cfg.DebuggerPort, cfg.DebuggerPort)
 	if err != nil {
@@ -140,7 +151,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 
 	log.Printf("✅ Debugger 可在 localhost:%d 連接", cfg.DebuggerPort)
 
-	// 7. 啟動檔案監控
+	// 8. 啟動檔案監控
 	log.Println("👀 啟動檔案監控...")
 	fileWatcher := watcher.New(cfg.LocalBinary, func(path string) {
 		log.Printf("🔄 偵測到檔案更新: %s", path)
