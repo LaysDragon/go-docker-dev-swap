@@ -145,10 +145,10 @@ func (m *Manager) CheckDevContainerExists(devName string) (exists bool, isDevSwa
 	}
 
 	// 容器存在，檢查是否有 dev-swap=true 標籤
-	cmd = fmt.Sprintf("sudo docker inspect %s --format '{{index .Config.Labels \"dev-swap\"}}'" , containerID)
+	cmd = fmt.Sprintf("sudo docker inspect %s --format '{{index .Config.Labels \"dev-swap\"}}'", containerID)
 	output, err = m.ssh.Execute(cmd)
 	if err != nil {
-		return true, false, containerID, nil
+		return true, false, containerID, fmt.Errorf("檢查容器標籤失敗: %w", err)
 	}
 
 	label := strings.TrimSpace(output)
