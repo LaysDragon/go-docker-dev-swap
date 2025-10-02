@@ -17,6 +17,7 @@ type Config struct {
 	DebuggerPort        int        `yaml:"debugger_port"`
 	ExtraPorts          []int      `yaml:"extra_ports"`
 	DlvConfig           DlvConfig  `yaml:"dlv_config"`
+	InitialScripts      string     `yaml:"initial_scripts"`
 }
 
 type RemoteHost struct {
