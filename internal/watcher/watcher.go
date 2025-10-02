@@ -52,8 +52,10 @@ func (w *Watcher) Start(ctx context.Context) error {
 				}
 
 				// 只關注目標檔案的寫入和建立事件
-				if event.Name == w.path && (event.Op&fsnotify.Write == fsnotify.Write ||
-					event.Op&fsnotify.Create == fsnotify.Create) {
+				// it event.op always be trigger as chmod event with go build under wsl for some reason
+				//if event.Name == w.path && (event.Op&fsnotify.Write == fsnotify.Write ||
+				//	event.Op&fsnotify.Create == fsnotify.Create) {
+				if event.Name == w.path {
 
 					// 重置防抖動計時器
 					if debounceTimer != nil {
