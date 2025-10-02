@@ -82,13 +82,13 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 		return fmt.Errorf("獲取容器配置失敗: %w", err)
 	}
 
-	// 4. 上傳初始執行檔
+	// 2. 上傳初始執行檔
 	log.Println("📤 上傳初始執行檔...")
 	if err := sshClient.UploadFile(cfg.LocalBinary, cfg.RemoteBinaryPath); err != nil {
 		return fmt.Errorf("上傳執行檔失敗: %w", err)
 	}
 
-	// 2. 停止原始容器
+	// 3. 停止原始容器
 	log.Println("🛑 停止原始容器...")
 	if err := dockerMgr.StopContainer(cfg.TargetService); err != nil {
 		return fmt.Errorf("停止容器失敗: %w", err)
@@ -104,7 +104,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 		}
 	}()
 
-	// 3. 建立開發容器
+	// 4. 建立開發容器
 	log.Println("🔧 建立開發容器...")
 	devContainer, err := dockerMgr.CreateDevContainer(originalContainer, cfg)
 	if err != nil {
