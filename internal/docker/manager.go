@@ -157,7 +157,7 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 
 	// 如果有 dlv，也掛載進去
 	if remoteDlvPath != "" {
-		cmdParts = append(cmdParts, fmt.Sprintf("-v %s:/usr/local/bin/dlv", remoteDlvPath))
+		cmdParts = append(cmdParts, fmt.Sprintf("-v %s:%s/dlv", remoteDlvPath, original.WorkingDir))
 	}
 
 	// 端口映射
@@ -197,10 +197,10 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 	var entryParts []string
 	// 命令 (使用 dlv 或直接執行)
 	if cfg.DlvConfig.Enabled {
-		dlvCmd := fmt.Sprintf("dlv exec %s --headless --listen=:%d --api-version=2 --accept-multiclient %s",
+		dlvCmd := fmt.Sprintf("./dlv exec %s --headless --listen=:%d --api-version=2 --accept-multiclient %s",
 			cfg.ContainerBinaryPath, cfg.DlvConfig.Port, cfg.DlvConfig.Args)
-		entryParts = append(entryParts, fmt.Sprintf("sh -c '%s'", dlvCmd))
-		// entryParts = append(entryParts, fmt.Sprintf("sh -c '%s'", dlvCmd))
+		entryParts = append(entryParts, dlvCmd)
+		//entryParts = append(entryParts, fmt.Sprintf("sh -c '%s'", dlvCmd))
 	} else {
 		entryParts = append(entryParts, cfg.ContainerBinaryPath)
 	}
