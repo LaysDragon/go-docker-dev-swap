@@ -2,11 +2,21 @@
 
 一個用於微服務開發的容器替換調試工具，支持遠端 Docker Compose 環境的快速開發和調試。
 
+## 使用情景
+接手大型遠古微服務專案，重建完整的遠端編譯環境不夠方便，私有庫認證、依賴同步等問題層出不窮。直接端口轉發也不適用，因為這些微服務通過共享掛載目錄緊密耦合。
+
+本工具採用另一種方案：本地快速編譯後，將執行檔和調試器上傳至測試伺服器，動態替換目標容器並啟動 Delve debugger，透過 SSH tunnel 實現遠端調試。退出時自動恢復原始環境。
+
+**跨平台編譯注意事項：**
+- 不同環境編譯可能存在動態庫依賴問題，建議使用相同環境編譯或在 `initial_scripts` 中安裝必要依賴
+- Delve 需要自行提供，可複製本地安裝版本或指定路徑。目標容器如內建 dlv 更佳，但仍需注意依賴問題
+- 範例：本地 WSL Ubuntu + 目標 Alpine 容器，只需通過 `initial_scripts` 配置在容器中執行 `apk add --no-cache libc6-compat` 即可解決依賴
+
 ## 功能特性
 
 - 🔄 **容器替換**: 自動停止原始容器，建立配置相同的開發容器
-- 🐛 **遠端調試**: 內建 Delve debugger 支持，通過 SSH tunnel 連接
-- 📦 **自動部署**: 監控本地編譯檔案，自動上傳並重啟容器
+- 🐛 **遠端調試**: 提供 SSH tunnel 連接在本地上暴露 Delve debugger 端口
+- 📦 **自動部署**: 監控本地檔案，自動上傳並重啟容器
 - 🧹 **自動清理**: 退出時自動清理開發容器並恢復原始服務
 - 🔌 **SSH 管理**: 內建 SSH 和 SFTP 支持，無需額外工具
 
@@ -106,17 +116,9 @@ docker-dev-swap -config config.yaml -service api-service
 
 ## 進階配置
 
-### 多端口暴露
-
-```yaml
-extra_ports:
-  - 8080  # HTTP
-  - 9090  # Metrics
-  - 6060  # pprof
-```
 
 ### 自定義 Delve 參數
-
+更多配置請參考 [CONFIG.md](docs/CONFIG.md)
 ```yaml
 dlv_config:
   enabled: true
@@ -148,34 +150,6 @@ remote_host:
 │             │<─────│                  │      │ (with dlv)  │
 └─────────────┘      └──────────────────┘      └─────────────┘
 ```
-
-## 故障排除
-
-### SSH 連接失敗
-- 檢查主機、端口、用戶名和密碼
-- 確認防火牆規則
-- 嘗試使用 `ssh user@host` 手動測試
-
-### 容器啟動失敗
-- 檢查原始容器是否正常運行
-- 確認 `compose_dir` 路徑正確
-- 查看遠端 Docker 日誌: `docker logs <container-name>-dev`
-
-### Debugger 無法連接
-- 確認 SSH tunnel 已建立
-- 檢查防火牆是否阻擋本地端口
-- 確認容器內 Delve 正常運行: `docker exec <container-name>-dev ps aux | grep dlv`
-
-### 檔案上傳失敗
-- 檢查 `remote_binary_path` 目錄是否有寫入權限
-- 確認磁碟空間充足
-
-## 依賴項目
-
-- [golang.org/x/crypto/ssh](https://pkg.go.dev/golang.org/x/crypto/ssh) - SSH 客戶端
-- [github.com/pkg/sftp](https://github.com/pkg/sftp) - SFTP 檔案傳輸
-- [github.com/fsnotify/fsnotify](https://github.com/fsnotify/fsnotify) - 檔案監控
-- [gopkg.in/yaml.v3](https://gopkg.in/yaml.v3) - YAML 解析
 
 ## 授權
 

@@ -1,14 +1,6 @@
 # 配置指南
 
 ## 配置系統
-
-Docker Dev Swap 使用 [Viper](https://github.com/spf13/viper) 作為配置管理系統，支持：
-
-- ✅ YAML 配置文件
-- ✅ 環境變數覆蓋
-- ✅ 預設值系統
-- ✅ 配置驗證
-
 ## 配置文件位置
 
 程序會按以下順序查找配置文件：
@@ -19,7 +11,6 @@ Docker Dev Swap 使用 [Viper](https://github.com/spf13/viper) 作為配置管�
 4. 系統目錄：`/etc/docker-dev-swap/config.yaml`
 
 ## 配置項說明
-
 ### 必要配置項
 
 這些配置項必須設定，否則程序無法運行：
@@ -135,22 +126,6 @@ dlv_config:
   args: "--log --log-output=debugger,rpc"
 ```
 
-## 配置驗證
-
-程序啟動時會自動驗證配置：
-
-✅ **自動處理：**
-- 將相對路徑轉換為絕對路徑
-- 驗證必要配置項是否存在
-- 檢查認證方式是否正確設定
-
-❌ **錯誤提示：**
-```
-錯誤: 必要配置缺失: remote_host.host
-錯誤: 必須提供 remote_host.password 或 remote_host.key_file 其中之一
-錯誤: 無法解析 key_file 路徑: no such file or directory
-```
-
 ## 配置優先級
 
 配置值的優先級（從高到低）：
@@ -158,14 +133,3 @@ dlv_config:
 1. 環境變數
 2. 配置文件
 3. 預設值
-
-這意味著環境變數可以覆蓋配置文件中的值。
-
-## 調試配置
-
-如果需要查看最終使用的配置值，可以添加調試輸出：
-
-```go
-// 在 main.go 中添加
-log.Printf("使用的配置: %+v", cfg)
-```
