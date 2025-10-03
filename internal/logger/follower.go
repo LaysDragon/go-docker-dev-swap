@@ -47,8 +47,8 @@ func (f *Follower) Start(ctx context.Context) error {
 			return nil
 		default:
 			if err := f.followLogs(ctx); err != nil {
-				log.Printf("⚠️  日誌監控中斷: %v", err)
-				log.Println("🔄 等待 3 秒後重新連接...")
+				log.Printf("日誌監控中斷: %v", err)
+				log.Println("等待 3 秒後重新連接...")
 
 				// 等待一段時間後重試
 				select {
@@ -106,7 +106,7 @@ func (f *Follower) followLogs(ctx context.Context) error {
 			// 寫入文件（如果啟用）
 			if f.enableFile && f.logFile != nil {
 				if _, err := f.logFile.WriteString(line + "\n"); err != nil {
-					log.Printf("⚠️  寫入日誌文件失敗: %v", err)
+					log.Printf("寫入日誌文件失敗: %v", err)
 				}
 			}
 		}
