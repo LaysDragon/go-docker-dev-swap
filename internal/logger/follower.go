@@ -76,77 +76,43 @@ func (f *Follower) followLogs(ctx context.Context) error {
 	// 使用 --tail 50 只顯示最近 50 行，避免歷史日誌過多
 	logsCmd := fmt.Sprintf("sudo docker logs -f --tail 50 %s 2>&1", f.containerName)
 
-	// 遠端模式：使用 SSH session 流式傳輸
+	// 根據執行模式選擇不同的流式執行方式
 	if f.executor.IsRemote() {
-		return f.followLogsRemote(ctx, logsCmd)
-	}
+		// 遠端模式：使用 SSH session
+		session, err := f.executor.CreateSession()
+		if err != nil {
+			return fmt.Errorf("創建 SSH session 失敗: %w", err)
+		}
+		defer session.Close()
 
-	// 本地模式：使用本地命令流式輸出
-	return f.followLogsLocal(ctx, logsCmd)
-}
-
-// followLogsRemote 遠端模式下跟蹤日誌
-func (f *Follower) followLogsRemote(ctx context.Context, logsCmd string) error {
-	// 創建一個 SSH session 用於執行命令
-	session, err := f.executor.CreateSession()
-	if err != nil {
-		return fmt.Errorf("創建 SSH session 失敗: %w", err)
-	}
-	defer session.Close()
-
-	// 獲取標準輸出管道
-	stdout, err := session.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("獲取標準輸出失敗: %w", err)
-	}
-
-	// 啟動命令
-	if err := session.Start(logsCmd); err != nil {
-		return fmt.Errorf("啟動日誌監控失敗: %w", err)
-	}
-
-	// 創建一個 goroutine 來處理日誌輸出
-	errChan := make(chan error, 1)
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			line := scanner.Text()
-			f.processLogLine(line)
+		stdout, err := session.StdoutPipe()
+		if err != nil {
+			return fmt.Errorf("獲取標準輸出失敗: %w", err)
 		}
 
-		if err := scanner.Err(); err != nil && err != io.EOF {
-			errChan <- err
-		} else {
-			errChan <- nil
+		if err := session.Start(logsCmd); err != nil {
+			return fmt.Errorf("啟動日誌監控失敗: %w", err)
 		}
-	}()
 
-	// 等待命令結束或上下文取消
-	select {
-	case <-ctx.Done():
-		session.Close() // 關閉 session 來中斷命令
-		return ctx.Err()
-	case err := <-errChan:
-		session.Wait()
-		return err
+		return f.streamLogs(ctx, stdout, func() { session.Close() }, func() { session.Wait() })
 	}
-}
 
-// followLogsLocal 本地模式下跟蹤日誌
-func (f *Follower) followLogsLocal(ctx context.Context, logsCmd string) error {
+	// 本地模式：使用本地命令
 	cmd := exec.Command("bash", "-c", logsCmd)
-
-	// 獲取標準輸出管道
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("獲取標準輸出失敗: %w", err)
 	}
 
-	// 啟動命令
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("啟動日誌監控失敗: %w", err)
 	}
 
+	return f.streamLogs(ctx, stdout, func() { cmd.Process.Kill() }, func() { cmd.Wait() })
+}
+
+// streamLogs 統一處理日誌流
+func (f *Follower) streamLogs(ctx context.Context, stdout io.Reader, cancel func(), wait func()) error {
 	// 創建一個 goroutine 來處理日誌輸出
 	errChan := make(chan error, 1)
 	go func() {
@@ -166,10 +132,10 @@ func (f *Follower) followLogsLocal(ctx context.Context, logsCmd string) error {
 	// 等待命令結束或上下文取消
 	select {
 	case <-ctx.Done():
-		cmd.Process.Kill() // 終止進程
+		cancel() // 取消/終止命令
 		return ctx.Err()
 	case err := <-errChan:
-		cmd.Wait()
+		wait() // 等待命令完成
 		return err
 	}
 }
