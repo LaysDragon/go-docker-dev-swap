@@ -7,23 +7,24 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
-	"github.com/laysdragon/go-docker-dev-swap/internal/ssh"
+	"github.com/laysdragon/go-docker-dev-swap/internal/executor"
 )
 
 type Follower struct {
-	ssh           *ssh.Client
+	executor      executor.Executor
 	containerName string
 	logFile       *os.File
 	enableFile    bool
 	logFilePath   string
 }
 
-func NewFollower(sshClient *ssh.Client, containerName string, logFilePath string) *Follower {
+func NewFollower(exec executor.Executor, containerName string, logFilePath string) *Follower {
 	return &Follower{
-		ssh:           sshClient,
+		executor:      exec,
 		containerName: containerName,
 		enableFile:    logFilePath != "",
 		logFilePath:   logFilePath,
@@ -66,7 +67,7 @@ func (f *Follower) Start(ctx context.Context) error {
 func (f *Follower) followLogs(ctx context.Context) error {
 	// 檢查容器是否存在
 	checkCmd := fmt.Sprintf("sudo docker ps -q --filter name=^/%s$", f.containerName)
-	output, err := f.ssh.Execute(checkCmd)
+	output, err := f.executor.Execute(checkCmd)
 	if err != nil || output == "" {
 		return fmt.Errorf("容器 %s 不存在或未運行", f.containerName)
 	}
@@ -75,8 +76,19 @@ func (f *Follower) followLogs(ctx context.Context) error {
 	// 使用 --tail 50 只顯示最近 50 行，避免歷史日誌過多
 	logsCmd := fmt.Sprintf("sudo docker logs -f --tail 50 %s 2>&1", f.containerName)
 
+	// 遠端模式：使用 SSH session 流式傳輸
+	if f.executor.IsRemote() {
+		return f.followLogsRemote(ctx, logsCmd)
+	}
+
+	// 本地模式：使用本地命令流式輸出
+	return f.followLogsLocal(ctx, logsCmd)
+}
+
+// followLogsRemote 遠端模式下跟蹤日誌
+func (f *Follower) followLogsRemote(ctx context.Context, logsCmd string) error {
 	// 創建一個 SSH session 用於執行命令
-	session, err := f.ssh.CreateSession()
+	session, err := f.executor.CreateSession()
 	if err != nil {
 		return fmt.Errorf("創建 SSH session 失敗: %w", err)
 	}
@@ -99,16 +111,7 @@ func (f *Follower) followLogs(ctx context.Context) error {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			line := scanner.Text()
-
-			// 輸出到控制台
-			fmt.Println(line)
-
-			// 寫入文件（如果啟用）
-			if f.enableFile && f.logFile != nil {
-				if _, err := f.logFile.WriteString(line + "\n"); err != nil {
-					log.Printf("寫入日誌文件失敗: %v", err)
-				}
-			}
+			f.processLogLine(line)
 		}
 
 		if err := scanner.Err(); err != nil && err != io.EOF {
@@ -126,6 +129,61 @@ func (f *Follower) followLogs(ctx context.Context) error {
 	case err := <-errChan:
 		session.Wait()
 		return err
+	}
+}
+
+// followLogsLocal 本地模式下跟蹤日誌
+func (f *Follower) followLogsLocal(ctx context.Context, logsCmd string) error {
+	cmd := exec.Command("bash", "-c", logsCmd)
+
+	// 獲取標準輸出管道
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("獲取標準輸出失敗: %w", err)
+	}
+
+	// 啟動命令
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("啟動日誌監控失敗: %w", err)
+	}
+
+	// 創建一個 goroutine 來處理日誌輸出
+	errChan := make(chan error, 1)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			line := scanner.Text()
+			f.processLogLine(line)
+		}
+
+		if err := scanner.Err(); err != nil && err != io.EOF {
+			errChan <- err
+		} else {
+			errChan <- nil
+		}
+	}()
+
+	// 等待命令結束或上下文取消
+	select {
+	case <-ctx.Done():
+		cmd.Process.Kill() // 終止進程
+		return ctx.Err()
+	case err := <-errChan:
+		cmd.Wait()
+		return err
+	}
+}
+
+// processLogLine 處理單行日誌
+func (f *Follower) processLogLine(line string) {
+	// 輸出到控制台
+	fmt.Println(line)
+
+	// 寫入文件（如果啟用）
+	if f.enableFile && f.logFile != nil {
+		if _, err := f.logFile.WriteString(line + "\n"); err != nil {
+			log.Printf("寫入日誌文件失敗: %v", err)
+		}
 	}
 }
 

@@ -3,7 +3,12 @@
 # ============================================
 # 複製此文件為 config.yaml 並修改為你的設定
 
-# 遠端主機配置
+# 執行模式：
+# - "remote": 遠端模式，通過 SSH 連接到遠端主機操作 Docker（默認）
+# - "local": 本地模式，直接在本地操作 Docker（不需要 SSH，tunnel 功能會被跳過）
+# mode: "remote"                             # [可選] 默認: remote
+
+# 遠端主機配置（僅在 remote 模式下需要）
 remote_host:
   host: "192.168.1.100"                      # [必要] 遠端主機地址
   user: "developer"                          # [必要] SSH 用戶名

@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
+	Mode                string     `mapstructure:"mode"` // "local" 或 "remote"，預設 "remote"
 	RemoteHost          RemoteHost `mapstructure:"remote_host"`
 	ComposeDir          string     `mapstructure:"compose_dir"`
 	TargetService       string     `mapstructure:"target_service"`
 	LocalBinary         string     `mapstructure:"local_binary"`
-	RemoteWorkDir       string     `mapstructure:"remote_work_dir"`    // 遠端工作目錄
+	RemoteWorkDir       string     `mapstructure:"remote_work_dir"`    // 遠端工作目錄（本地模式也使用此路徑）
 	RemoteBinaryName    string     `mapstructure:"remote_binary_name"` // 遠端執行檔名稱
 	ContainerBinaryPath string     `mapstructure:"container_binary_path"`
 	DebuggerPort        int        `mapstructure:"debugger_port"`
@@ -103,6 +104,9 @@ func Load(path string) (*Config, error) {
 
 // setDefaults 設定所有非必要選項的預設值
 func setDefaults(v *viper.Viper) {
+	// 執行模式預設值
+	v.SetDefault("mode", "remote")
+
 	// 遠端主機預設值
 	v.SetDefault("remote_host.port", 22)
 
@@ -132,15 +136,31 @@ func setDefaults(v *viper.Viper) {
 
 // validateConfig 驗證必要配置項
 func validateConfig(cfg *Config) error {
-	// 必要配置：遠端主機
-	if cfg.RemoteHost.Host == "" {
-		return fmt.Errorf("必要配置缺失: remote_host.host")
+	// 驗證執行模式
+	if cfg.Mode != "local" && cfg.Mode != "remote" {
+		return fmt.Errorf("mode 必須是 'local' 或 'remote'")
 	}
-	if cfg.RemoteHost.User == "" {
-		return fmt.Errorf("必要配置缺失: remote_host.user")
-	}
-	if cfg.RemoteHost.Password == "" && cfg.RemoteHost.KeyFile == "" {
-		return fmt.Errorf("必須提供 remote_host.password 或 remote_host.key_file 其中之一")
+
+	// 遠端模式需要遠端主機配置
+	if cfg.Mode == "remote" {
+		if cfg.RemoteHost.Host == "" {
+			return fmt.Errorf("遠端模式必須配置: remote_host.host")
+		}
+		if cfg.RemoteHost.User == "" {
+			return fmt.Errorf("遠端模式必須配置: remote_host.user")
+		}
+		if cfg.RemoteHost.Password == "" && cfg.RemoteHost.KeyFile == "" {
+			return fmt.Errorf("遠端模式必須提供 remote_host.password 或 remote_host.key_file 其中之一")
+		}
+
+		// 驗證 key_file 路徑（如果提供）
+		if cfg.RemoteHost.KeyFile != "" {
+			keyPath, err := filepath.Abs(cfg.RemoteHost.KeyFile)
+			if err != nil {
+				return fmt.Errorf("無法解析 key_file 路徑: %w", err)
+			}
+			cfg.RemoteHost.KeyFile = keyPath
+		}
 	}
 
 	// 必要配置：Docker Compose 目錄
@@ -156,15 +176,6 @@ func validateConfig(cfg *Config) error {
 	// 必要配置：本地二進制文件
 	if cfg.LocalBinary == "" {
 		return fmt.Errorf("必要配置缺失: local_binary")
-	}
-
-	// 驗證 key_file 路徑（如果提供）
-	if cfg.RemoteHost.KeyFile != "" {
-		keyPath, err := filepath.Abs(cfg.RemoteHost.KeyFile)
-		if err != nil {
-			return fmt.Errorf("無法解析 key_file 路徑: %w", err)
-		}
-		cfg.RemoteHost.KeyFile = keyPath
 	}
 
 	// 驗證 local_binary 路徑

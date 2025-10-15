@@ -6,12 +6,12 @@ import (
 	"strings"
 
 	"github.com/laysdragon/go-docker-dev-swap/internal/config"
-	"github.com/laysdragon/go-docker-dev-swap/internal/ssh"
+	"github.com/laysdragon/go-docker-dev-swap/internal/executor"
 )
 
 type Manager struct {
-	ssh    *ssh.Client
-	config *config.Config
+	executor executor.Executor
+	config   *config.Config
 }
 
 type ContainerConfig struct {
@@ -31,17 +31,17 @@ type DevContainer struct {
 	OriginalName string
 }
 
-func NewManager(sshClient *ssh.Client, cfg *config.Config) *Manager {
+func NewManager(exec executor.Executor, cfg *config.Config) *Manager {
 	return &Manager{
-		ssh:    sshClient,
-		config: cfg,
+		executor: exec,
+		config:   cfg,
 	}
 }
 
 func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, error) {
 	// 獲取容器 ID
 	cmd := fmt.Sprintf("cd %s && sudo docker compose ps -q %s -a", m.config.ComposeDir, serviceName)
-	containerID, err := m.ssh.Execute(cmd)
+	containerID, err := m.executor.Execute(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("獲取容器 ID 失敗: %w", err)
 	}
@@ -49,7 +49,7 @@ func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, erro
 
 	// 獲取容器詳細資訊
 	cmd = fmt.Sprintf("sudo docker inspect %s", containerID)
-	output, err := m.ssh.Execute(cmd)
+	output, err := m.executor.Execute(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("獲取容器資訊失敗: %w", err)
 	}
@@ -126,7 +126,7 @@ func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, erro
 
 func (m *Manager) StopContainer(serviceName string) error {
 	cmd := fmt.Sprintf("cd %s && sudo docker compose stop %s", m.config.ComposeDir, serviceName)
-	_, err := m.ssh.Execute(cmd)
+	_, err := m.executor.Execute(cmd)
 	return err
 }
 
@@ -134,7 +134,7 @@ func (m *Manager) StopContainer(serviceName string) error {
 func (m *Manager) CheckDevContainerExists(devName string) (exists bool, isDevSwap bool, containerID string, err error) {
 	// 檢查容器是否存在
 	cmd := fmt.Sprintf("sudo docker ps -a --filter name=^/%s$ --format '{{.ID}}'", devName)
-	output, err := m.ssh.Execute(cmd)
+	output, err := m.executor.Execute(cmd)
 	if err != nil {
 		return false, false, "", fmt.Errorf("檢查容器失敗: %w", err)
 	}
@@ -146,7 +146,7 @@ func (m *Manager) CheckDevContainerExists(devName string) (exists bool, isDevSwa
 
 	// 容器存在，檢查是否有 dev-swap=true 標籤
 	cmd = fmt.Sprintf("sudo docker inspect %s --format '{{index .Config.Labels \"dev-swap\"}}'", containerID)
-	output, err = m.ssh.Execute(cmd)
+	output, err = m.executor.Execute(cmd)
 	if err != nil {
 		return true, false, containerID, fmt.Errorf("檢查容器標籤失敗: %w", err)
 	}
@@ -172,7 +172,7 @@ func (m *Manager) RemoveDevContainerIfExists(devName string) error {
 
 	// 移除容器
 	cmd := fmt.Sprintf("sudo docker rm -f %s", containerID)
-	_, err = m.ssh.Execute(cmd)
+	_, err = m.executor.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("移除殘留容器失敗: %w", err)
 	}
@@ -271,13 +271,13 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 	}
 	cmdParts = append(cmdParts, "sh /app/init.sh")
 
-	if err := m.ssh.CreateScript(strings.Join(entryParts, " "), cfg.GetRemoteEntryScriptPath()); err != nil {
+	if err := m.executor.CreateScript(strings.Join(entryParts, " "), cfg.GetRemoteEntryScriptPath()); err != nil {
 		return nil, fmt.Errorf("上傳入口腳本失敗: %w", err)
 	}
 
 	cmd := strings.Join(cmdParts, " ")
 	fmt.Printf("執行命令: %s\n", cmd)
-	output, err := m.ssh.Execute(cmd)
+	output, err := m.executor.Execute(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("建立開發容器失敗: %w, output: %s", err, output)
 	}
@@ -290,24 +290,24 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 
 func (m *Manager) StartContainer(name string) error {
 	cmd := fmt.Sprintf("sudo docker start %s", name)
-	_, err := m.ssh.Execute(cmd)
+	_, err := m.executor.Execute(cmd)
 	return err
 }
 
 func (m *Manager) RestartContainer(name string) error {
 	cmd := fmt.Sprintf("sudo docker restart %s", name)
-	_, err := m.ssh.Execute(cmd)
+	_, err := m.executor.Execute(cmd)
 	return err
 }
 
 func (m *Manager) RemoveDevContainer(name string) error {
 	cmd := fmt.Sprintf("sudo docker rm -f %s", name)
-	_, err := m.ssh.Execute(cmd)
+	_, err := m.executor.Execute(cmd)
 	return err
 }
 
 func (m *Manager) RestoreOriginalContainer(serviceName string) error {
 	cmd := fmt.Sprintf("cd %s && sudo docker compose start %s", m.config.ComposeDir, serviceName)
-	_, err := m.ssh.Execute(cmd)
+	_, err := m.executor.Execute(cmd)
 	return err
 }

@@ -13,8 +13,8 @@ import (
 	"github.com/laysdragon/go-docker-dev-swap/internal/config"
 	"github.com/laysdragon/go-docker-dev-swap/internal/dlv"
 	"github.com/laysdragon/go-docker-dev-swap/internal/docker"
+	"github.com/laysdragon/go-docker-dev-swap/internal/executor"
 	"github.com/laysdragon/go-docker-dev-swap/internal/logger"
-	"github.com/laysdragon/go-docker-dev-swap/internal/ssh"
 	"github.com/laysdragon/go-docker-dev-swap/internal/watcher"
 )
 
@@ -42,18 +42,21 @@ func main() {
 	}
 
 	log.Printf("啟動 docker-dev-swap")
-	log.Printf("遠端主機: %s@%s", cfg.RemoteHost.User, cfg.RemoteHost.Host)
+	log.Printf("執行模式: %s", cfg.Mode)
+	if cfg.Mode == "remote" {
+		log.Printf("遠端主機: %s@%s", cfg.RemoteHost.User, cfg.RemoteHost.Host)
+	}
 	log.Printf("目標服務: %s", cfg.TargetService)
 
-	// 建立 SSH 連接
-	sshClient, err := ssh.NewClient(cfg.RemoteHost)
+	// 建立 Executor
+	exec, err := executor.NewExecutor(cfg)
 	if err != nil {
-		log.Fatalf("SSH 連接失敗: %v", err)
+		log.Fatalf("建立 Executor 失敗: %v", err)
 	}
-	defer sshClient.Close()
+	defer exec.Close()
 
 	// 建立 Docker 管理器
-	dockerMgr := docker.NewManager(sshClient, cfg)
+	dockerMgr := docker.NewManager(exec, cfg)
 
 	// 啟動主流程
 	ctx, cancel := context.WithCancel(context.Background())
@@ -70,14 +73,14 @@ func main() {
 	}()
 
 	// 執行主要工作流程
-	if err := run(ctx, dockerMgr, cfg, sshClient); err != nil {
+	if err := run(ctx, dockerMgr, cfg, exec); err != nil {
 		log.Fatalf("執行失敗: %v", err)
 	}
 
 	log.Println("已完成清理，程序退出")
 }
 
-func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, sshClient *ssh.Client) error {
+func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, exec executor.Executor) error {
 	// 1. 獲取原始容器配置
 	log.Println("獲取原始容器配置...")
 	originalContainer, err := dockerMgr.GetContainerConfig(cfg.TargetService)
@@ -100,7 +103,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 			// 上傳 dlv
 			log.Println("上傳 dlv 到遠端...")
 			remoteDlvPath = cfg.GetRemoteDlvPath()
-			if err := sshClient.UploadFile(localDlvPath, remoteDlvPath); err != nil {
+			if err := exec.UploadFile(localDlvPath, remoteDlvPath); err != nil {
 				log.Printf("上傳 dlv 失敗: %v", err)
 				remoteDlvPath = "" // 重置，使用容器內的 dlv
 			} else {
@@ -113,10 +116,10 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 
 	// 3. 上傳初始執行檔
 	log.Println("上傳初始執行檔...")
-	if err := sshClient.UploadFile(cfg.LocalBinary, cfg.GetRemoteBinaryPath()); err != nil {
+	if err := exec.UploadFile(cfg.LocalBinary, cfg.GetRemoteBinaryPath()); err != nil {
 		return fmt.Errorf("上傳執行檔失敗: %w", err)
 	}
-	if err := sshClient.CreateScript(fmt.Sprintf("%s\nsh ./entry.sh", cfg.InitialScripts), cfg.GetRemoteInitScriptPath()); err != nil {
+	if err := exec.CreateScript(fmt.Sprintf("%s\nsh ./entry.sh", cfg.InitialScripts), cfg.GetRemoteInitScriptPath()); err != nil {
 		return fmt.Errorf("上傳初始腳本失敗: %w", err)
 	}
 
@@ -185,15 +188,19 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 		return fmt.Errorf("啟動開發容器失敗: %w", err)
 	}
 
-	// 7. 建立 SSH Tunnel (用於 Debugger)
-	log.Println("建立 SSH Tunnel...")
-	tunnel, err := sshClient.CreateTunnel(cfg.DebuggerPort, cfg.DebuggerPort)
-	if err != nil {
-		return fmt.Errorf("建立 SSH Tunnel 失敗: %w", err)
+	// 7. 建立 SSH Tunnel (用於 Debugger) - 僅遠端模式
+	var tunnel executor.TunnelCloser
+	if exec.IsRemote() {
+		log.Println("建立 SSH Tunnel...")
+		tunnel, err = exec.CreateTunnel(cfg.DebuggerPort, cfg.DebuggerPort)
+		if err != nil {
+			return fmt.Errorf("建立 SSH Tunnel 失敗: %w", err)
+		}
+		defer tunnel.Close()
+		log.Printf("Debugger 可在 localhost:%d 連接", cfg.DebuggerPort)
+	} else {
+		log.Println("本地模式，跳過建立 SSH Tunnel")
 	}
-	defer tunnel.Close()
-
-	log.Printf("Debugger 可在 localhost:%d 連接", cfg.DebuggerPort)
 
 	// 8. 啟動檔案監控
 	log.Println("啟動檔案監控...")
@@ -202,7 +209,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 
 		// 上傳新檔案
 		log.Println("上傳新執行檔...")
-		if err := sshClient.UploadFile(cfg.LocalBinary, cfg.GetRemoteBinaryPath()); err != nil {
+		if err := exec.UploadFile(cfg.LocalBinary, cfg.GetRemoteBinaryPath()); err != nil {
 			log.Printf("上傳失敗: %v", err)
 			return
 		}
@@ -227,7 +234,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, ssh
 		log.Printf("日誌將寫入文件: %s", cfg.LogFile)
 	}
 
-	logFollower := logger.NewFollower(sshClient, devContainer.Name, cfg.LogFile)
+	logFollower := logger.NewFollower(exec, devContainer.Name, cfg.LogFile)
 	go func() {
 		if err := logFollower.Start(ctx); err != nil && err != context.Canceled {
 			log.Printf("日誌監控停止: %v", err)
