@@ -12,13 +12,28 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
+// Session 定義了流式命令執行的統一接口
+type Session interface {
+	// StdoutPipe 返回標準輸出管道
+	StdoutPipe() (io.Reader, error)
+	
+	// Start 啟動命令
+	Start(command string) error
+	
+	// Wait 等待命令完成
+	Wait() error
+	
+	// Close 關閉 session
+	Close() error
+}
+
 // Executor 定義了執行操作的抽象接口
 type Executor interface {
 	// Execute 執行 shell 指令
 	Execute(command string) (string, error)
 	
-	// CreateSession 建立一個 SSH session (僅遠端模式)
-	CreateSession() (*gossh.Session, error)
+	// CreateSession 建立一個流式執行 session
+	CreateSession() (Session, error)
 	
 	// UploadFile 上傳/複製檔案
 	UploadFile(localPath, remotePath string) error
@@ -69,9 +84,8 @@ func (e *LocalExecutor) Execute(command string) (string, error) {
 	return string(output), nil
 }
 
-func (e *LocalExecutor) CreateSession() (*gossh.Session, error) {
-	// 本地模式不支援 SSH session，但返回 nil 錯誤以便上層處理
-	return nil, fmt.Errorf("本地模式不支援 CreateSession，請使用 Execute 方法")
+func (e *LocalExecutor) CreateSession() (Session, error) {
+	return &LocalSession{}, nil
 }
 
 func (e *LocalExecutor) UploadFile(localPath, destPath string) error {
@@ -165,8 +179,12 @@ func (e *RemoteExecutor) Execute(command string) (string, error) {
 	return e.sshClient.Execute(command)
 }
 
-func (e *RemoteExecutor) CreateSession() (*gossh.Session, error) {
-	return e.sshClient.CreateSession()
+func (e *RemoteExecutor) CreateSession() (Session, error) {
+	sshSession, err := e.sshClient.CreateSession()
+	if err != nil {
+		return nil, err
+	}
+	return &RemoteSession{session: sshSession}, nil
 }
 
 func (e *RemoteExecutor) UploadFile(localPath, remotePath string) error {
@@ -198,5 +216,91 @@ func (e *RemoteExecutor) GetSSHClient() *ssh.Client {
 type noopCloser struct{}
 
 func (n *noopCloser) Close() error {
+	return nil
+}
+
+// LocalSession 本地命令執行 session
+type LocalSession struct {
+	cmd    *exec.Cmd
+	stdout io.ReadCloser
+}
+
+func (s *LocalSession) StdoutPipe() (io.Reader, error) {
+	if s.stdout != nil {
+		return s.stdout, nil
+	}
+	return nil, fmt.Errorf("必須先調用 Start")
+}
+
+func (s *LocalSession) Start(command string) error {
+	s.cmd = exec.Command("bash", "-c", command)
+	
+	stdout, err := s.cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("獲取標準輸出失敗: %w", err)
+	}
+	s.stdout = stdout
+	
+	if err := s.cmd.Start(); err != nil {
+		return fmt.Errorf("啟動命令失敗: %w", err)
+	}
+	
+	return nil
+}
+
+func (s *LocalSession) Wait() error {
+	if s.cmd == nil {
+		return nil
+	}
+	return s.cmd.Wait()
+}
+
+func (s *LocalSession) Close() error {
+	if s.cmd != nil && s.cmd.Process != nil {
+		return s.cmd.Process.Kill()
+	}
+	return nil
+}
+
+// RemoteSession SSH 遠端執行 session
+type RemoteSession struct {
+	session *gossh.Session
+	stdout  io.Reader
+}
+
+func (s *RemoteSession) StdoutPipe() (io.Reader, error) {
+	if s.stdout != nil {
+		return s.stdout, nil
+	}
+	return nil, fmt.Errorf("必須先調用 Start")
+}
+
+func (s *RemoteSession) Start(command string) error {
+	// SSH 必須在 Start 之前設置 StdoutPipe
+	if s.stdout == nil {
+		stdout, err := s.session.StdoutPipe()
+		if err != nil {
+			return fmt.Errorf("獲取標準輸出失敗: %w", err)
+		}
+		s.stdout = stdout
+	}
+	
+	if err := s.session.Start(command); err != nil {
+		return fmt.Errorf("啟動命令失敗: %w", err)
+	}
+	return nil
+}
+
+func (s *RemoteSession) Wait() error {
+	if s.session == nil {
+		return nil
+	}
+	return s.session.Wait()
+}
+
+func (s *RemoteSession) Close() error {
+	if s.session != nil {
+		return s.session.Close()
+	}
 	return nil
 }

@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -76,43 +75,32 @@ func (f *Follower) followLogs(ctx context.Context) error {
 	// 使用 --tail 50 只顯示最近 50 行，避免歷史日誌過多
 	logsCmd := fmt.Sprintf("sudo docker logs -f --tail 50 %s 2>&1", f.containerName)
 
-	// 根據執行模式選擇不同的流式執行方式
-	if f.executor.IsRemote() {
-		// 遠端模式：使用 SSH session
-		session, err := f.executor.CreateSession()
-		if err != nil {
-			return fmt.Errorf("創建 SSH session 失敗: %w", err)
-		}
-		defer session.Close()
+	// 創建統一的 session（本地或遠端）
+	session, err := f.executor.CreateSession()
+	if err != nil {
+		return fmt.Errorf("創建 session 失敗: %w", err)
+	}
+	defer session.Close()
 
-		stdout, err := session.StdoutPipe()
-		if err != nil {
-			return fmt.Errorf("獲取標準輸出失敗: %w", err)
-		}
-
-		if err := session.Start(logsCmd); err != nil {
-			return fmt.Errorf("啟動日誌監控失敗: %w", err)
-		}
-
-		return f.streamLogs(ctx, stdout, func() { session.Close() }, func() { session.Wait() })
+	// 啟動命令（內部會自動處理 StdoutPipe 的獲取時機）
+	if err := session.Start(logsCmd); err != nil {
+		return fmt.Errorf("啟動日誌監控失敗: %w", err)
 	}
 
-	// 本地模式：使用本地命令
-	cmd := exec.Command("bash", "-c", logsCmd)
-	stdout, err := cmd.StdoutPipe()
+	// Start 之後獲取輸出流（此時兩種實現都已準備好）
+	stdout, err := session.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("獲取標準輸出失敗: %w", err)
 	}
 
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("啟動日誌監控失敗: %w", err)
-	}
-
-	return f.streamLogs(ctx, stdout, func() { cmd.Process.Kill() }, func() { cmd.Wait() })
+	return f.streamLogs(ctx, stdout, session)
 }
 
 // streamLogs 統一處理日誌流
-func (f *Follower) streamLogs(ctx context.Context, stdout io.Reader, cancel func(), wait func()) error {
+func (f *Follower) streamLogs(ctx context.Context, stdout io.Reader, session interface {
+	Close() error
+	Wait() error
+}) error {
 	// 創建一個 goroutine 來處理日誌輸出
 	errChan := make(chan error, 1)
 	go func() {
@@ -132,10 +120,10 @@ func (f *Follower) streamLogs(ctx context.Context, stdout io.Reader, cancel func
 	// 等待命令結束或上下文取消
 	select {
 	case <-ctx.Done():
-		cancel() // 取消/終止命令
+		session.Close() // 關閉 session
 		return ctx.Err()
 	case err := <-errChan:
-		wait() // 等待命令完成
+		session.Wait() // 等待命令完成
 		return err
 	}
 }
