@@ -19,6 +19,8 @@
 - 📦 **自動部署**: 監控本地檔案，自動上傳並重啟容器
 - 🧹 **自動清理**: 退出時自動清理開發容器並恢復原始服務
 - 🔌 **SSH 管理**: 內建 SSH 和 SFTP 支持，無需額外工具
+- 🏠 **雙模式支持**: 支持本地和遠端兩種執行模式，靈活切換（參見 [MODES.md](docs/MODES.md)）
+- 📝 **日誌監控**: 實時監控容器日誌，可選寫入本地文件（參見 [LOGGING.md](docs/LOGGING.md)）
 
 ## 安裝
 
@@ -40,7 +42,10 @@ go build -o docker-dev-swap ./cmd/docker-dev-swap
 
 複製 `config.example.yaml` 為 `config.yaml` 並修改:
 
+**遠端模式（默認）:**
 ```yaml
+mode: "remote"  # 可省略，默認為 remote
+
 remote_host:
   host: "your-server.com"
   user: "developer"
@@ -51,6 +56,18 @@ target_service: "your-service"
 local_binary: "./bin/your-app"
 container_binary_path: "/app/your-app"
 ```
+
+**本地模式:**
+```yaml
+mode: "local"  # 本地執行，不需要 SSH
+
+compose_dir: "/path/to/docker-compose"
+target_service: "your-service"
+local_binary: "./bin/your-app"
+container_binary_path: "/app/your-app"
+```
+
+> 詳細模式說明請參考 [MODES.md](docs/MODES.md)
 
 ### 2. 編譯你的 Go 應用
 
