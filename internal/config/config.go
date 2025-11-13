@@ -330,12 +330,14 @@ func validateConfig(cfg *Config) error {
 			if host.Port == 0 {
 				host.Port = defaultValues.Host.Port
 			}
-			if host.RemoteWorkDir == "" {
-				host.RemoteWorkDir = defaultValues.Host.RemoteWorkDir
-			}
-			if host.RemoteBinaryName == "" {
-				host.RemoteBinaryName = defaultValues.Host.RemoteBinaryName
-			}
+
+		}
+
+		if host.RemoteWorkDir == "" {
+			host.RemoteWorkDir = defaultValues.Host.RemoteWorkDir
+		}
+		if host.RemoteBinaryName == "" {
+			host.RemoteBinaryName = defaultValues.Host.RemoteBinaryName
 		}
 		
 		// 設定 Docker 命令預設值
