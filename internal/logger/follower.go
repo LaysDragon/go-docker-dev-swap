@@ -8,11 +8,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/laysdragon/go-docker-dev-swap/internal/config"
 	"github.com/laysdragon/go-docker-dev-swap/internal/executor"
-	"github.com/laysdragon/go-docker-dev-swap/internal/sudo"
 )
 
 type Follower struct {
@@ -21,7 +21,6 @@ type Follower struct {
 	logFile       *os.File
 	enableFile    bool
 	logFilePath   string
-	sudoWrapper   *sudo.Wrapper
 	dockerCmd     string
 }
 
@@ -36,7 +35,6 @@ func NewFollower(exec executor.Executor, containerName string, cfg *config.Confi
 		containerName: containerName,
 		enableFile:    cfg.LogFile != "",
 		logFilePath:   cfg.LogFile,
-		sudoWrapper:   sudo.NewWrapper(cfg.UseSudo, cfg.SudoPassword),
 		dockerCmd:     dockerCmd,
 	}
 }
@@ -178,10 +176,11 @@ func (f *Follower) openLogFile() error {
 	return nil
 }
 
-// buildDockerCmd 構建 docker 命令並根據配置包裝 sudo
+// buildDockerCmd 構建 docker 命令
+// 注意：sudo 包装由 Executor 层统一处理
 func (f *Follower) buildDockerCmd(args ...string) string {
 	parts := append([]string{f.dockerCmd}, args...)
-	return f.sudoWrapper.WrapMultiple(parts...)
+	return strings.Join(parts, " ")
 }
 
 // closeLogFile 關閉日誌文件

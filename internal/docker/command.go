@@ -5,20 +5,18 @@ import (
 	"strings"
 
 	"github.com/laysdragon/go-docker-dev-swap/internal/config"
-	"github.com/laysdragon/go-docker-dev-swap/internal/sudo"
 )
 
 // CommandBuilder 用於構建 Docker 命令的抽象層
+// 注意：sudo 包装由 Executor 层统一处理，这里只负责构建 Docker 命令本身
 type CommandBuilder struct {
-	config      *config.Config
-	sudoWrapper *sudo.Wrapper
+	config *config.Config
 }
 
 // NewCommandBuilder 創建命令構建器
 func NewCommandBuilder(cfg *config.Config) *CommandBuilder {
 	return &CommandBuilder{
-		config:      cfg,
-		sudoWrapper: sudo.NewWrapper(cfg.UseSudo, cfg.SudoPassword),
+		config: cfg,
 	}
 }
 
@@ -30,7 +28,7 @@ func (cb *CommandBuilder) Docker(args ...string) string {
 	}
 	
 	parts := append([]string{cmd}, args...)
-	return cb.sudoWrapper.WrapMultiple(parts...)
+	return strings.Join(parts, " ")
 }
 
 // DockerCompose 構建 docker-compose/docker compose 命令
@@ -48,5 +46,5 @@ func (cb *CommandBuilder) DockerCompose(workDir string, args ...string) string {
 		cmd = fmt.Sprintf("%s %s", composeCmd, strings.Join(args, " "))
 	}
 	
-	return cb.sudoWrapper.Wrap(cmd)
+	return cmd
 }

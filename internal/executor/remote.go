@@ -5,12 +5,14 @@ import (
 
 	"github.com/laysdragon/go-docker-dev-swap/internal/config"
 	"github.com/laysdragon/go-docker-dev-swap/internal/ssh"
+	"github.com/laysdragon/go-docker-dev-swap/internal/sudo"
 )
 
 // RemoteExecutor 遠端執行器
 type RemoteExecutor struct {
-	sshClient *ssh.Client
-	config    *config.Config
+	sshClient   *ssh.Client
+	config      *config.Config
+	sudoWrapper *sudo.Wrapper
 }
 
 // NewRemoteExecutor 創建遠端執行器
@@ -21,13 +23,16 @@ func NewRemoteExecutor(cfg *config.Config) (*RemoteExecutor, error) {
 	}
 
 	return &RemoteExecutor{
-		sshClient: sshClient,
-		config:    cfg,
+		sshClient:   sshClient,
+		config:      cfg,
+		sudoWrapper: sudo.NewWrapper(cfg.UseSudo, cfg.SudoPassword),
 	}, nil
 }
 
 func (e *RemoteExecutor) Execute(command string) (string, error) {
-	return e.sshClient.Execute(command)
+	// 使用 sudo wrapper 包装命令
+	wrappedCmd := e.sudoWrapper.Wrap(command)
+	return e.sshClient.Execute(wrappedCmd)
 }
 
 func (e *RemoteExecutor) CreateSession() (Session, error) {
