@@ -31,8 +31,11 @@ func (w *Wrapper) Wrap(command string) string {
 	escapedCmd := strings.ReplaceAll(command, "'", "'\\''")
 
 	if w.password != "" {
-		// 有密码：echo 'password' | sudo -S bash -c 'command'
-		return fmt.Sprintf("echo '%s' | sudo -S bash -c '%s'", w.password, escapedCmd)
+		// 有密码：
+		// 1. 使用 -S 从标准输入读取密码
+		// 2. 使用 -p '' 设置空密码提示，避免 "[sudo] xxx 的密碼：" 等提示信息
+		// 这样 sudo 就不会输出任何密码提示，保持输出干净
+		return fmt.Sprintf("echo '%s' | sudo -S -p '' bash -c '%s'", w.password, escapedCmd)
 	}
 
 	// 无密码：sudo bash -c 'command'
