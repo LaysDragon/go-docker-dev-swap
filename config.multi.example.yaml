@@ -1,0 +1,151 @@
+# ============================================
+# Docker Dev Swap 多組配置範例
+# ============================================
+# 此範例展示如何配置多個本地組件、遠端主機和專案
+# 執行時會互動式選擇要使用的配置組合
+
+# 執行模式：
+# - "remote": 遠端模式，通過 SSH 連接到遠端主機操作 Docker（默認）
+# - "local": 本地模式，直接在本地操作 Docker
+mode: "remote"
+
+# ============================================
+# 全域 Docker 命令配置
+# ============================================
+# use_sudo: false                            # [可選] 是否使用 sudo 執行命令，默認: false
+# sudo_password: ""                          # [可選] sudo 提權密碼（如需要），默認: "" (無密碼)
+# docker_command: "docker"                   # [可選] docker 命令路徑，默認: docker
+# docker_compose_command: "docker compose"   # [可選] docker compose 命令，默認: docker compose
+
+# ============================================
+# 本地組件配置
+# ============================================
+# 定義多個本地組件，每個組件對應一個要開發的服務
+components:
+  # 組件 1: API 服務
+  api-service:
+    name: "API 服務"                         # [必要] 組件顯示名稱
+    local_binary: "./bin/api-service"        # [必要] 本地編譯的執行檔路徑
+    target_service: "api"                    # [必要] docker-compose 中的服務名稱
+    container_binary_path: "/app/service"    # [可選] 容器內的執行檔路徑，默認: /app/service
+    debugger_port: 2345                      # [可選] Debugger 端口，默認: 2345
+    extra_ports: []                          # [可選] 額外需要暴露的端口，默認: []
+    initial_scripts: ""                      # [可選] 容器啟動前執行的初始化腳本，默認: ""
+    log_file: ""                             # [可選] 日誌文件路徑，默認: ""
+    
+    # Delve Debugger 配置（全部可選）
+    dlv_config:
+      enabled: false                         # [可選] 是否啟用 Delve，默認: false
+      port: 2345                             # [可選] Delve 端口，默認: 2345
+      args: ""                               # [可選] Delve 參數，默認: ""
+      local_path: ""                         # [可選] 本地 dlv 路徑，默認: "" (自動搜尋)
+
+  # 組件 2: Worker 服務 (簡化範例：只設定必要欄位，其他使用預設值)
+  worker-service:
+    name: "Worker 服務"
+    local_binary: "./bin/worker"
+    target_service: "worker"
+    # container_binary_path: "/app/service"  # 使用預設值
+    debugger_port: 2346                      # 覆寫預設 2345
+    # extra_ports: []                        # 使用預設值 []
+    # dlv_config:                            # 使用預設值：enabled=false, port=2345
+    #   enabled: false
+    #   port: 2346
+
+  # 組件 3: Scheduler 服務 (最簡範例：僅必要欄位)
+  scheduler:
+    name: "排程服務"
+    local_binary: "./bin/scheduler"
+    target_service: "scheduler"
+    # 所有可選欄位皆使用預設值
+
+# ============================================
+# 遠端主機配置
+# ============================================
+# 定義多個遠端主機
+hosts:
+  # 主機 1: 開發環境
+  dev-server:
+    name: "開發伺服器"                       # [必要] 主機顯示名稱
+    host: "192.168.1.100"                    # [必要] 主機地址
+    port: 22                                 # [可選] SSH 端口，默認: 22
+    user: "developer"                        # [必要] SSH 用戶名
+    password: "your-password"                # [必要/可選] SSH 密碼（或使用 key_file）
+    # key_file: "/home/user/.ssh/id_rsa"     # [必要/可選] SSH 私鑰路徑
+    remote_work_dir: "/tmp/dev-binaries"     # [可選] 遠端工作目錄，默認: /tmp/dev-binaries
+    remote_binary_name: "service"            # [可選] 遠端執行檔名稱，默認: service
+
+  # 主機 2: 測試環境
+  test-server:
+    name: "測試伺服器"
+    host: "192.168.1.101"
+    port: 22
+    user: "tester"
+    key_file: "/home/user/.ssh/test_rsa"
+    remote_work_dir: "/tmp/test-binaries"
+    remote_binary_name: "service"
+
+  # 主機 3: 本地 Docker (使用 localhost)
+  local-docker:
+    name: "本地 Docker"
+    host: "localhost"
+    port: 22
+    user: "localuser"
+    password: "localpass"
+
+# ============================================
+# 專案配置
+# ============================================
+# 定義多個專案，每個專案對應一個 docker-compose 應用
+projects:
+  # 專案 1: 微服務應用 (在開發伺服器上)
+  microservices-app:
+    name: "微服務應用"                       # [必要] 專案顯示名稱
+    host: "dev-server"                       # [必要] 關聯的主機名稱（hosts 中的 key）
+    compose_dir: "/opt/microservices/app"    # [必要] docker-compose.yml 所在目錄
+
+  # 專案 2: 數據處理應用 (在開發伺服器上)
+  data-pipeline:
+    name: "數據處理流水線"
+    host: "dev-server"
+    compose_dir: "/opt/data-pipeline"
+
+  # 專案 3: 測試環境應用 (在測試伺服器上)
+  test-environment:
+    name: "測試環境"
+    host: "test-server"
+    compose_dir: "/home/tester/test-app"
+
+  # 專案 4: 本地測試 (在本地 Docker 上)
+  local-test:
+    name: "本地測試專案"
+    host: "local-docker"
+    compose_dir: "/home/localuser/projects/app"
+
+# ============================================
+# 使用說明
+# ============================================
+# 1. 複製此文件為 config.yaml
+# 2. 修改各配置項為你的實際設定
+# 3. 執行程序時會依序選擇：
+#    - 選擇本地組件 (components)
+#    - 選擇遠端主機 (hosts)
+#    - 選擇該主機上的專案 (projects)
+#
+# 範例互動流程：
+#   選擇本地組件:
+#     [1] API 服務 (service: api, binary: ./bin/api-service)
+#     [2] Worker 服務 (service: worker, binary: ./bin/worker)
+#     [3] 排程服務 (service: scheduler, binary: ./bin/scheduler)
+#   請選擇 (輸入編號): 1
+#
+#   選擇遠端主機:
+#     [1] 開發伺服器 (developer@192.168.1.100:22)
+#     [2] 測試伺服器 (tester@192.168.1.101:22)
+#     [3] 本地 Docker (localuser@localhost:22)
+#   請選擇 (輸入編號): 1
+#
+#   選擇專案:
+#     [1] 微服務應用 (compose: /opt/microservices/app)
+#     [2] 數據處理流水線 (compose: /opt/data-pipeline)
+#   請選擇 (輸入編號): 1

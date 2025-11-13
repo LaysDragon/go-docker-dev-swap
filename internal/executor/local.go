@@ -12,15 +12,15 @@ import (
 
 // LocalExecutor 本地執行器
 type LocalExecutor struct {
-	config      *config.Config
+	config      *config.RuntimeConfig
 	sudoWrapper *SudoWrapper
 }
 
 // NewLocalExecutor 創建本地執行器
-func NewLocalExecutor(cfg *config.Config) (*LocalExecutor, error) {
+func NewLocalExecutor(rc *config.RuntimeConfig) (*LocalExecutor, error) {
 	return &LocalExecutor{
-		config:      cfg,
-		sudoWrapper: NewSudoWrapper(cfg.UseSudo, cfg.SudoPassword),
+		config:      rc,
+		sudoWrapper: NewSudoWrapper(rc.UseSudo, rc.SudoPassword),
 	}, nil
 }
 

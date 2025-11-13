@@ -8,15 +8,15 @@ import (
 )
 
 // CommandBuilder 用於構建 Docker 命令的抽象層
-// 注意：sudo 包装由 Executor 层统一处理，这里只负责构建 Docker 命令本身
+// 注意：sudo 包装由 Executor 层统一处理，這裡只負責構建 Docker 命令本身
 type CommandBuilder struct {
-	config *config.Config
+	config *config.RuntimeConfig
 }
 
 // NewCommandBuilder 創建命令構建器
-func NewCommandBuilder(cfg *config.Config) *CommandBuilder {
+func NewCommandBuilder(rc *config.RuntimeConfig) *CommandBuilder {
 	return &CommandBuilder{
-		config: cfg,
+		config: rc,
 	}
 }
 

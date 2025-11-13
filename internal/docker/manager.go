@@ -11,7 +11,7 @@ import (
 
 type Manager struct {
 	executor executor.Executor
-	config   *config.Config
+	config   *config.RuntimeConfig
 	cmdBuilder *CommandBuilder
 }
 
@@ -32,17 +32,17 @@ type DevContainer struct {
 	OriginalName string
 }
 
-func NewManager(exec executor.Executor, cfg *config.Config) *Manager {
+func NewManager(exec executor.Executor, rc *config.RuntimeConfig) *Manager {
 	return &Manager{
 		executor:   exec,
-		config:     cfg,
-		cmdBuilder: NewCommandBuilder(cfg),
+		config:     rc,
+		cmdBuilder: NewCommandBuilder(rc),
 	}
 }
 
 func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, error) {
 	// 獲取容器 ID
-	cmd := m.cmdBuilder.DockerCompose(m.config.ComposeDir, "ps", "-q", serviceName, "-a")
+	cmd := m.cmdBuilder.DockerCompose(m.config.Project.ComposeDir, "ps", "-q", serviceName, "-a")
 	containerID, err := m.executor.Execute(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("獲取容器 ID 失敗: %w", err)
@@ -127,7 +127,7 @@ func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, erro
 }
 
 func (m *Manager) StopContainer(serviceName string) error {
-	cmd := m.cmdBuilder.DockerCompose(m.config.ComposeDir, "stop", serviceName)
+	cmd := m.cmdBuilder.DockerCompose(m.config.Project.ComposeDir, "stop", serviceName)
 	_, err := m.executor.Execute(cmd)
 	return err
 }
@@ -182,8 +182,8 @@ func (m *Manager) RemoveDevContainerIfExists(devName string) error {
 	return nil
 }
 
-func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Config, remoteDlvPath string) (*DevContainer, error) {
-	devName := cfg.GetDevContainerName()
+func (m *Manager) CreateDevContainer(original *ContainerConfig, remoteDlvPath string) (*DevContainer, error) {
+	devName := m.config.GetDevContainerName()
 
 	// 檢查是否有殘留的開發容器
 	exists, isDevSwap, containerID, err := m.CheckDevContainerExists(devName)
@@ -216,10 +216,10 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 
 	// 新增執行檔掛載
 	cmdParts = append(cmdParts, fmt.Sprintf("-v %s:%s",
-		cfg.GetRemoteBinaryPath(), cfg.ContainerBinaryPath))
+		m.config.GetRemoteBinaryPath(), m.config.Component.ContainerBinaryPath))
 
-	cmdParts = append(cmdParts, fmt.Sprintf("-v %s:/app/entry.sh", cfg.GetRemoteEntryScriptPath()))
-	cmdParts = append(cmdParts, fmt.Sprintf("-v %s:/app/init.sh", cfg.GetRemoteInitScriptPath()))
+	cmdParts = append(cmdParts, fmt.Sprintf("-v %s:/app/entry.sh", m.config.GetRemoteEntryScriptPath()))
+	cmdParts = append(cmdParts, fmt.Sprintf("-v %s:/app/init.sh", m.config.GetRemoteInitScriptPath()))
 
 	// 如果有 dlv，也掛載進去
 	if remoteDlvPath != "" {
@@ -227,11 +227,11 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 	}
 
 	// 端口映射
-	if cfg.DlvConfig.Enabled {
+	if m.config.Component.DlvConfig.Enabled {
 		cmdParts = append(cmdParts, fmt.Sprintf("-p %d:%d",
-			cfg.DlvConfig.Port, cfg.DlvConfig.Port))
+			m.config.Component.DlvConfig.Port, m.config.Component.DlvConfig.Port))
 	}
-	for _, port := range cfg.ExtraPorts {
+	for _, port := range m.config.Component.ExtraPorts {
 		cmdParts = append(cmdParts, fmt.Sprintf("-p %d:%d", port, port))
 	}
 
@@ -262,18 +262,18 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 
 	var entryParts []string
 	// 命令 (使用 dlv 或直接執行)
-	if cfg.DlvConfig.Enabled {
+	if m.config.Component.DlvConfig.Enabled {
 		// 需要 continue 不然需要連線兩次應用才會正式開始執行，原因不明
 		dlvCmd := fmt.Sprintf("./dlv exec %s --headless --listen=:%d --api-version=2 --accept-multiclient --continue %s",
-			cfg.ContainerBinaryPath, cfg.DlvConfig.Port, cfg.DlvConfig.Args)
+			m.config.Component.ContainerBinaryPath, m.config.Component.DlvConfig.Port, m.config.Component.DlvConfig.Args)
 		entryParts = append(entryParts, dlvCmd)
 		//entryParts = append(entryParts, fmt.Sprintf("sh -c '%s'", dlvCmd))
 	} else {
-		entryParts = append(entryParts, cfg.ContainerBinaryPath)
+		entryParts = append(entryParts, m.config.Component.ContainerBinaryPath)
 	}
 	cmdParts = append(cmdParts, "sh /app/init.sh")
 
-	if err := m.executor.CreateScript(strings.Join(entryParts, " "), cfg.GetRemoteEntryScriptPath()); err != nil {
+	if err := m.executor.CreateScript(strings.Join(entryParts, " "), m.config.GetRemoteEntryScriptPath()); err != nil {
 		return nil, fmt.Errorf("上傳入口腳本失敗: %w", err)
 	}
 
@@ -310,7 +310,7 @@ func (m *Manager) RemoveDevContainer(name string) error {
 }
 
 func (m *Manager) RestoreOriginalContainer(serviceName string) error {
-	cmd := m.cmdBuilder.DockerCompose(m.config.ComposeDir, "start", serviceName)
+	cmd := m.cmdBuilder.DockerCompose(m.config.Project.ComposeDir, "start", serviceName)
 	_, err := m.executor.Execute(cmd)
 	return err
 }

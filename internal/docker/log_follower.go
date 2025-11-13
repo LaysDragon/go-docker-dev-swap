@@ -26,14 +26,14 @@ type LogFollower struct {
 }
 
 // NewLogFollower 創建日誌監控器
-func NewLogFollower(exec executor.Executor, manager *Manager, containerName string, cfg *config.Config) *LogFollower {
+func NewLogFollower(exec executor.Executor, manager *Manager, containerName string, rc *config.RuntimeConfig) *LogFollower {
 	return &LogFollower{
 		executor:      exec,
 		manager:       manager,
-		cmdBuilder:    NewCommandBuilder(cfg),
+		cmdBuilder:    NewCommandBuilder(rc),
 		containerName: containerName,
-		enableFile:    cfg.LogFile != "",
-		logFilePath:   cfg.LogFile,
+		enableFile:    rc.Component.LogFile != "",
+		logFilePath:   rc.Component.LogFile,
 	}
 }
 

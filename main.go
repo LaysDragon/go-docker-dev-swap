@@ -30,31 +30,39 @@ func main() {
 		log.Fatalf("載入配置失敗: %v", err)
 	}
 
-	// 如果指定了服務名稱，覆蓋配置
-	if *service != "" {
-		cfg.TargetService = *service
+	// 互動式選擇配置（支援多組配置）
+	runtimeCfg, err := cfg.InteractiveSelect()
+	if err != nil {
+		log.Fatalf("選擇配置失敗: %v", err)
 	}
 
-	if cfg.TargetService == "" {
+	// 如果指定了服務名稱，覆蓋配置
+	if *service != "" {
+		runtimeCfg.Component.TargetService = *service
+	}
+
+	if runtimeCfg.Component.TargetService == "" {
 		log.Fatal("必須指定目標服務名稱")
 	}
 
 	log.Printf("啟動 docker-dev-swap")
-	log.Printf("執行模式: %s", cfg.Mode)
-	if cfg.Mode == "remote" {
-		log.Printf("遠端主機: %s@%s", cfg.RemoteHost.User, cfg.RemoteHost.Host)
+	log.Printf("執行模式: %s", runtimeCfg.Mode)
+	log.Printf("本地組件: %s", runtimeCfg.Component.Name)
+	if runtimeCfg.Mode == "remote" {
+		log.Printf("遠端主機: %s (%s@%s)", runtimeCfg.Host.Name, runtimeCfg.Host.User, runtimeCfg.Host.Host)
+		log.Printf("專案位置: %s", runtimeCfg.Project.ComposeDir)
 	}
-	log.Printf("目標服務: %s", cfg.TargetService)
+	log.Printf("目標服務: %s", runtimeCfg.Component.TargetService)
 
 	// 建立 Executor
-	exec, err := executor.NewExecutor(cfg)
+	exec, err := executor.NewExecutor(runtimeCfg)
 	if err != nil {
 		log.Fatalf("建立 Executor 失敗: %v", err)
 	}
 	defer exec.Close()
 
 	// 建立 Docker 管理器
-	dockerMgr := docker.NewManager(exec, cfg)
+	dockerMgr := docker.NewManager(exec, runtimeCfg)
 
 	// 啟動主流程
 	ctx, cancel := context.WithCancel(context.Background())
@@ -71,28 +79,28 @@ func main() {
 	}()
 
 	// 執行主要工作流程
-	if err := run(ctx, dockerMgr, cfg, exec); err != nil {
+	if err := run(ctx, dockerMgr, runtimeCfg, exec); err != nil {
 		log.Fatalf("執行失敗: %v", err)
 	}
 
 	log.Println("已完成清理，程序退出")
 }
 
-func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, exec executor.Executor) error {
+func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfig, exec executor.Executor) error {
 	// 1. 獲取原始容器配置
 	log.Println("獲取原始容器配置...")
-	originalContainer, err := dockerMgr.GetContainerConfig(cfg.TargetService)
+	originalContainer, err := dockerMgr.GetContainerConfig(rc.Component.TargetService)
 	if err != nil {
 		return fmt.Errorf("獲取容器配置失敗: %w", err)
 	}
 
 	// 2. 查找並上傳 dlv（如果啟用且配置）
 	var remoteDlvPath string
-	if cfg.DlvConfig.Enabled {
+	if rc.Component.DlvConfig.Enabled {
 		log.Println("查找本地 dlv...")
 
 		// 查找 dlv
-		localDlvPath, err := local.FindDlv(cfg.DlvConfig.LocalPath)
+		localDlvPath, err := local.FindDlv(rc.Component.DlvConfig.LocalPath)
 		if err != nil {
 			log.Printf("查找 dlv 失敗: %v", err)
 		} else if localDlvPath != "" {
@@ -100,7 +108,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, exe
 
 			// 上傳 dlv
 			log.Println("上傳 dlv 到遠端...")
-			remoteDlvPath = cfg.GetRemoteDlvPath()
+			remoteDlvPath = rc.GetRemoteDlvPath()
 			if err := exec.UploadFile(localDlvPath, remoteDlvPath); err != nil {
 				log.Printf("上傳 dlv 失敗: %v", err)
 				remoteDlvPath = "" // 重置，使用容器內的 dlv
@@ -114,23 +122,23 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, exe
 
 	// 3. 上傳初始執行檔
 	log.Println("上傳初始執行檔...")
-	if err := exec.UploadFile(cfg.LocalBinary, cfg.GetRemoteBinaryPath()); err != nil {
+	if err := exec.UploadFile(rc.Component.LocalBinary, rc.GetRemoteBinaryPath()); err != nil {
 		return fmt.Errorf("上傳執行檔失敗: %w", err)
 	}
-	if err := exec.CreateScript(fmt.Sprintf("%s\nsh ./entry.sh", cfg.InitialScripts), cfg.GetRemoteInitScriptPath()); err != nil {
+	if err := exec.CreateScript(fmt.Sprintf("%s\nsh ./entry.sh", rc.Component.InitialScripts), rc.GetRemoteInitScriptPath()); err != nil {
 		return fmt.Errorf("上傳初始腳本失敗: %w", err)
 	}
 
 	// 4. 停止原始容器
 	log.Println("停止原始容器...")
-	if err := dockerMgr.StopContainer(cfg.TargetService); err != nil {
+	if err := dockerMgr.StopContainer(rc.Component.TargetService); err != nil {
 		return fmt.Errorf("停止容器失敗: %w", err)
 	}
 
 	// 確保退出時恢復原始容器
 	defer func() {
 		log.Println("恢復原始容器...")
-		if err := dockerMgr.RestoreOriginalContainer(cfg.TargetService); err != nil {
+		if err := dockerMgr.RestoreOriginalContainer(rc.Component.TargetService); err != nil {
 			log.Printf("恢復原始容器失敗: %v", err)
 		} else {
 			log.Println("原始容器已恢復")
@@ -139,7 +147,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, exe
 
 	// 5. 建立開發容器
 	log.Println("建立開發容器...")
-	devContainer, err := dockerMgr.CreateDevContainer(originalContainer, cfg, remoteDlvPath)
+	devContainer, err := dockerMgr.CreateDevContainer(originalContainer, remoteDlvPath)
 	if err != nil {
 		// 檢查是否為容器名稱衝突錯誤
 		if strings.Contains(err.Error(), "發現殘留的開發容器") {
@@ -151,14 +159,14 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, exe
 
 			if strings.ToLower(strings.TrimSpace(response)) == "y" {
 				log.Println("清理殘留容器...")
-				if err := dockerMgr.RemoveDevContainerIfExists(cfg.GetDevContainerName()); err != nil {
+				if err := dockerMgr.RemoveDevContainerIfExists(rc.GetDevContainerName()); err != nil {
 					return fmt.Errorf("清理殘留容器失敗: %w", err)
 				}
 				log.Println("殘留容器已清理")
 
 				// 重試建立開發容器
 				log.Println("重新建立開發容器...")
-				devContainer, err = dockerMgr.CreateDevContainer(originalContainer, cfg, remoteDlvPath)
+				devContainer, err = dockerMgr.CreateDevContainer(originalContainer, remoteDlvPath)
 				if err != nil {
 					return fmt.Errorf("建立開發容器失敗: %w", err)
 				}
@@ -190,24 +198,24 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, exe
 	var tunnel executor.TunnelCloser
 	if exec.IsRemote() {
 		log.Println("建立 SSH Tunnel...")
-		tunnel, err = exec.CreateTunnel(cfg.DebuggerPort, cfg.DebuggerPort)
+		tunnel, err = exec.CreateTunnel(rc.Component.DebuggerPort, rc.Component.DebuggerPort)
 		if err != nil {
 			return fmt.Errorf("建立 SSH Tunnel 失敗: %w", err)
 		}
 		defer tunnel.Close()
-		log.Printf("Debugger 可在 localhost:%d 連接", cfg.DebuggerPort)
+		log.Printf("Debugger 可在 localhost:%d 連接", rc.Component.DebuggerPort)
 	} else {
 		log.Println("本地模式，跳過建立 SSH Tunnel")
 	}
 
 	// 8. 啟動檔案監控
 	log.Println("啟動檔案監控...")
-	fileWatcher := local.NewFileWatcher(cfg.LocalBinary, func(path string) {
+	fileWatcher := local.NewFileWatcher(rc.Component.LocalBinary, func(path string) {
 		log.Printf("偵測到檔案更新: %s", path)
 
 		// 上傳新檔案
 		log.Println("上傳新執行檔...")
-		if err := exec.UploadFile(cfg.LocalBinary, cfg.GetRemoteBinaryPath()); err != nil {
+		if err := exec.UploadFile(rc.Component.LocalBinary, rc.GetRemoteBinaryPath()); err != nil {
 			log.Printf("上傳失敗: %v", err)
 			return
 		}
@@ -228,11 +236,11 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, exe
 
 	// 9. 啟動日誌監控
 	log.Println("啟動容器日誌監控...")
-	if cfg.LogFile != "" {
-		log.Printf("日誌將寫入文件: %s", cfg.LogFile)
+	if rc.Component.LogFile != "" {
+		log.Printf("日誌將寫入文件: %s", rc.Component.LogFile)
 	}
 
-	logFollower := docker.NewLogFollower(exec, dockerMgr, devContainer.Name, cfg)
+	logFollower := docker.NewLogFollower(exec, dockerMgr, devContainer.Name, rc)
 	go func() {
 		if err := logFollower.Start(ctx); err != nil && err != context.Canceled {
 			log.Printf("日誌監控停止: %v", err)

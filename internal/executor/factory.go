@@ -5,9 +5,9 @@ import (
 )
 
 // NewExecutor 根據配置建立對應的 Executor
-func NewExecutor(cfg *config.Config) (Executor, error) {
-	if cfg.Mode == "local" {
-		return NewLocalExecutor(cfg)
+func NewExecutor(rc *config.RuntimeConfig) (Executor, error) {
+	if rc.Mode == "local" {
+		return NewLocalExecutor(rc)
 	}
-	return NewRemoteExecutor(cfg)
+	return NewRemoteExecutor(rc)
 }

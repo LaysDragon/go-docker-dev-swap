@@ -9,22 +9,30 @@ import (
 // RemoteExecutor 遠端執行器
 type RemoteExecutor struct {
 	sshClient   *SSHClient
-	config      *config.Config
+	config      *config.RuntimeConfig
 	sudoWrapper *SudoWrapper
 }
 
 // NewRemoteExecutor 創建遠端執行器
-// NewRemoteExecutor 創建遠端執行器
-func NewRemoteExecutor(cfg *config.Config) (*RemoteExecutor, error) {
-	sshClient, err := NewSSHClient(cfg.RemoteHost)
+func NewRemoteExecutor(rc *config.RuntimeConfig) (*RemoteExecutor, error) {
+	// 從 RuntimeConfig 的 Host 創建 RemoteHost
+	remoteHost := config.RemoteHost{
+		Host:     rc.Host.Host,
+		Port:     rc.Host.Port,
+		User:     rc.Host.User,
+		Password: rc.Host.Password,
+		KeyFile:  rc.Host.KeyFile,
+	}
+	
+	sshClient, err := NewSSHClient(remoteHost)
 	if err != nil {
 		return nil, fmt.Errorf("SSH 連接失敗: %w", err)
 	}
 
 	return &RemoteExecutor{
 		sshClient:   sshClient,
-		config:      cfg,
-		sudoWrapper: NewSudoWrapper(cfg.UseSudo, cfg.SudoPassword),
+		config:      rc,
+		sudoWrapper: NewSudoWrapper(rc.UseSudo, rc.SudoPassword),
 	}, nil
 }
 
