@@ -9,8 +9,9 @@ import (
 
 // RemoteSession SSH 遠端執行 session
 type RemoteSession struct {
-	session *gossh.Session
-	stdout  io.Reader
+	session     *gossh.Session
+	stdout      io.Reader
+	sudoWrapper *SudoWrapper
 }
 
 func (s *RemoteSession) StdoutPipe() (io.Reader, error) {
@@ -30,7 +31,13 @@ func (s *RemoteSession) Start(command string) error {
 		s.stdout = stdout
 	}
 	
-	if err := s.session.Start(command); err != nil {
+	// 使用 sudo wrapper 包裝命令
+	wrappedCmd := command
+	if s.sudoWrapper != nil {
+		wrappedCmd = s.sudoWrapper.Wrap(command)
+	}
+	
+	if err := s.session.Start(wrappedCmd); err != nil {
 		return fmt.Errorf("啟動命令失敗: %w", err)
 	}
 	return nil

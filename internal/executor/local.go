@@ -37,7 +37,9 @@ func (e *LocalExecutor) Execute(command string) (string, error) {
 }
 
 func (e *LocalExecutor) CreateSession() (Session, error) {
-	return &LocalSession{}, nil
+	return &LocalSession{
+		sudoWrapper: e.sudoWrapper,
+	}, nil
 }
 
 func (e *LocalExecutor) UploadFile(localPath, destPath string) error {

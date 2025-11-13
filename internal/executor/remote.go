@@ -47,7 +47,10 @@ func (e *RemoteExecutor) CreateSession() (Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &RemoteSession{session: sshSession}, nil
+	return &RemoteSession{
+		session:     sshSession,
+		sudoWrapper: e.sudoWrapper,
+	}, nil
 }
 
 func (e *RemoteExecutor) UploadFile(localPath, remotePath string) error {

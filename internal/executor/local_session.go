@@ -8,8 +8,9 @@ import (
 
 // LocalSession 本地命令執行 session
 type LocalSession struct {
-	cmd    *exec.Cmd
-	stdout io.ReadCloser
+	cmd         *exec.Cmd
+	stdout      io.ReadCloser
+	sudoWrapper *SudoWrapper
 }
 
 func (s *LocalSession) StdoutPipe() (io.Reader, error) {
@@ -20,7 +21,13 @@ func (s *LocalSession) StdoutPipe() (io.Reader, error) {
 }
 
 func (s *LocalSession) Start(command string) error {
-	s.cmd = exec.Command("bash", "-c", command)
+	// 使用 sudo wrapper 包裝命令
+	wrappedCmd := command
+	if s.sudoWrapper != nil {
+		wrappedCmd = s.sudoWrapper.Wrap(command)
+	}
+	
+	s.cmd = exec.Command("bash", "-c", wrappedCmd)
 	
 	stdout, err := s.cmd.StdoutPipe()
 	if err != nil {
