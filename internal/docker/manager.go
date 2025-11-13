@@ -227,7 +227,7 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, remoteDlvPath st
 	}
 
 	// 端口映射
-	if m.config.Component.DlvConfig.Enabled {
+	if m.config.Component.DlvConfig != nil && m.config.Component.DlvConfig.Enabled {
 		cmdParts = append(cmdParts, fmt.Sprintf("-p %d:%d",
 			m.config.Component.DlvConfig.Port, m.config.Component.DlvConfig.Port))
 	}
@@ -262,7 +262,7 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, remoteDlvPath st
 
 	var entryParts []string
 	// 命令 (使用 dlv 或直接執行)
-	if m.config.Component.DlvConfig.Enabled {
+	if m.config.Component.DlvConfig != nil && m.config.Component.DlvConfig.Enabled {
 		// 需要 continue 不然需要連線兩次應用才會正式開始執行，原因不明
 		dlvCmd := fmt.Sprintf("./dlv exec %s --headless --listen=:%d --api-version=2 --accept-multiclient --continue %s",
 			m.config.Component.ContainerBinaryPath, m.config.Component.DlvConfig.Port, m.config.Component.DlvConfig.Args)

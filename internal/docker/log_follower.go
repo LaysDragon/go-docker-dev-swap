@@ -32,8 +32,13 @@ func NewLogFollower(exec executor.Executor, manager *Manager, containerName stri
 		manager:       manager,
 		cmdBuilder:    NewCommandBuilder(rc),
 		containerName: containerName,
-		enableFile:    rc.Component.LogFile != "",
-		logFilePath:   rc.Component.LogFile,
+		enableFile:    rc.Component.LogFile != nil && *rc.Component.LogFile != "",
+		logFilePath:   func() string {
+			if rc.Component.LogFile != nil {
+				return *rc.Component.LogFile
+			}
+			return ""
+		}(),
 	}
 }
 

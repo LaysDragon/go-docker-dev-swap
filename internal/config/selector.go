@@ -15,27 +15,6 @@ func (cfg *Config) InteractiveSelect() (*RuntimeConfig, error) {
 
 // selectMultiConfig 互動式選擇多組配置
 func (cfg *Config) selectMultiConfig() (*RuntimeConfig, error) {
-	rc := &RuntimeConfig{
-		Mode:                 cfg.Mode,
-		UseSudo:              cfg.UseSudo,
-		SudoPassword:         cfg.SudoPassword,
-		DockerCommand:        cfg.DockerCommand,
-		DockerComposeCommand: cfg.DockerComposeCommand,
-	}
-	
-	// 如果是本地模式，只需要選擇組件
-	if cfg.Mode == "local" {
-		componentName, err := selectFromMap("選擇本地組件", cfg.Components, func(c Component) string {
-			return fmt.Sprintf("%s (service: %s, binary: %s)", c.Name, c.TargetService, c.LocalBinary)
-		})
-		if err != nil {
-			return nil, err
-		}
-		rc.Component = cfg.Components[componentName]
-		return rc, nil
-	}
-	
-	// 遠端模式：建立完整的表單
 	var componentName, hostName, projectName string
 	
 	// 準備組件選項
@@ -54,13 +33,17 @@ func (cfg *Config) selectMultiConfig() (*RuntimeConfig, error) {
 	hostOptions := make([]huh.Option[string], len(hostKeys))
 	for i, key := range hostKeys {
 		h := cfg.Hosts[key]
+		modeLabel := "本地"
+		if h.Mode == "remote" {
+			modeLabel = fmt.Sprintf("遠端 %s@%s:%d", h.User, h.Host, h.Port)
+		}
 		hostOptions[i] = huh.NewOption(
-			fmt.Sprintf("%s (%s@%s:%d)", h.Name, h.User, h.Host, h.Port),
+			fmt.Sprintf("%s (%s)", h.Name, modeLabel),
 			key,
 		)
 	}
 	
-	// 建立表單（先不包含專案選擇，因為需要根據主機過濾）
+	// 建立表單（先選擇組件和主機）
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -69,7 +52,7 @@ func (cfg *Config) selectMultiConfig() (*RuntimeConfig, error) {
 				Value(&componentName),
 			
 			huh.NewSelect[string]().
-				Title("選擇遠端主機").
+				Title("選擇主機").
 				Options(hostOptions...).
 				Value(&hostName),
 		),
@@ -81,26 +64,18 @@ func (cfg *Config) selectMultiConfig() (*RuntimeConfig, error) {
 	}
 	
 	// 設定選擇的組件和主機
-	rc.Component = cfg.Components[componentName]
-	rc.Host = cfg.Hosts[hostName]
+	selectedComponent := cfg.Components[componentName]
+	selectedHost := cfg.Hosts[hostName]
 	
-	// 過濾出屬於選定主機的專案
-	availableProjects := make(map[string]Project)
-	for name, proj := range cfg.Projects {
-		if proj.HostRef == hostName {
-			availableProjects[name] = proj
-		}
-	}
-	
-	if len(availableProjects) == 0 {
+	// 選擇該主機上的專案
+	if len(selectedHost.Projects) == 0 {
 		return nil, fmt.Errorf("主機 '%s' 沒有可用的專案配置", hostName)
 	}
 	
-	// 選擇專案（單獨的表單，因為選項依賴於主機選擇）
-	projectKeys := sortedKeys(availableProjects)
+	projectKeys := sortedKeys(selectedHost.Projects)
 	projectOptions := make([]huh.Option[string], len(projectKeys))
 	for i, key := range projectKeys {
-		p := availableProjects[key]
+		p := selectedHost.Projects[key]
 		projectOptions[i] = huh.NewOption(
 			fmt.Sprintf("%s (compose: %s)", p.Name, p.ComposeDir),
 			key,
@@ -120,7 +95,33 @@ func (cfg *Config) selectMultiConfig() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("選擇專案失敗: %w", err)
 	}
 	
-	rc.Project = cfg.Projects[projectName]
+	selectedProject := selectedHost.Projects[projectName]
+	
+	// 合併 Component 和全局預設值（就地修改 selectedComponent）
+	// 如果 Component 中的欄位為 nil，使用全局預設值覆蓋
+	if selectedComponent.LogFile == nil || *selectedComponent.LogFile == "" {
+		selectedComponent.LogFile = &cfg.LogFile
+	}
+	
+	if selectedComponent.InitialScripts == nil || *selectedComponent.InitialScripts == "" {
+		selectedComponent.InitialScripts = &cfg.InitialScripts
+	}
+	
+	if selectedComponent.DlvConfig == nil {
+		selectedComponent.DlvConfig = &cfg.DlvConfig
+	}
+	
+	// 建立 RuntimeConfig（現在 selectedComponent 保證所有欄位都有值）
+	rc := &RuntimeConfig{
+		Mode:                 selectedHost.Mode,
+		Component:            selectedComponent,
+		Host:                 selectedHost,
+		Project:              selectedProject,
+		UseSudo:              selectedHost.UseSudo,
+		SudoPassword:         selectedHost.SudoPassword,
+		DockerCommand:        selectedHost.DockerCommand,
+		DockerComposeCommand: selectedHost.DockerComposeCommand,
+	}
 	
 	return rc, nil
 }

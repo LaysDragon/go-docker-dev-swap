@@ -96,7 +96,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfi
 
 	// 2. 查找並上傳 dlv（如果啟用且配置）
 	var remoteDlvPath string
-	if rc.Component.DlvConfig.Enabled {
+	if rc.Component.DlvConfig != nil && rc.Component.DlvConfig.Enabled {
 		log.Println("查找本地 dlv...")
 
 		// 查找 dlv
@@ -125,7 +125,12 @@ func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfi
 	if err := exec.UploadFile(rc.Component.LocalBinary, rc.GetRemoteBinaryPath()); err != nil {
 		return fmt.Errorf("上傳執行檔失敗: %w", err)
 	}
-	if err := exec.CreateScript(fmt.Sprintf("%s\nsh ./entry.sh", rc.Component.InitialScripts), rc.GetRemoteInitScriptPath()); err != nil {
+	
+	initialScripts := ""
+	if rc.Component.InitialScripts != nil {
+		initialScripts = *rc.Component.InitialScripts
+	}
+	if err := exec.CreateScript(fmt.Sprintf("%s\nsh ./entry.sh", initialScripts), rc.GetRemoteInitScriptPath()); err != nil {
 		return fmt.Errorf("上傳初始腳本失敗: %w", err)
 	}
 
@@ -236,8 +241,8 @@ func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfi
 
 	// 9. 啟動日誌監控
 	log.Println("啟動容器日誌監控...")
-	if rc.Component.LogFile != "" {
-		log.Printf("日誌將寫入文件: %s", rc.Component.LogFile)
+	if rc.Component.LogFile != nil && *rc.Component.LogFile != "" {
+		log.Printf("日誌將寫入文件: %s", *rc.Component.LogFile)
 	}
 
 	logFollower := docker.NewLogFollower(exec, dockerMgr, devContainer.Name, rc)
