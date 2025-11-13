@@ -1,20 +1,20 @@
-package sudo
+package executor
 
 import (
 	"fmt"
 	"strings"
 )
 
-// Wrapper 提供通用的 sudo 命令包装功能
+// SudoWrapper 提供通用的 sudo 命令包装功能
 // 支持临时提权 bash 执行命令，提高命令兼容性
-type Wrapper struct {
+type SudoWrapper struct {
 	enabled  bool   // 是否启用 sudo
 	password string // sudo 密码（可选）
 }
 
-// NewWrapper 创建 sudo 包装器
-func NewWrapper(enabled bool, password string) *Wrapper {
-	return &Wrapper{
+// NewSudoWrapper 创建 sudo 包装器
+func NewSudoWrapper(enabled bool, password string) *SudoWrapper {
+	return &SudoWrapper{
 		enabled:  enabled,
 		password: password,
 	}
@@ -22,7 +22,7 @@ func NewWrapper(enabled bool, password string) *Wrapper {
 
 // Wrap 将命令包装为带 sudo 的形式
 // 使用临时提权 bash 来运行命令，提高兼容性
-func (w *Wrapper) Wrap(command string) string {
+func (w *SudoWrapper) Wrap(command string) string {
 	if !w.enabled {
 		return command
 	}
@@ -44,17 +44,17 @@ func (w *Wrapper) Wrap(command string) string {
 
 // WrapMultiple 包装多个命令参数组成的命令
 // 例如: WrapMultiple("docker", "ps", "-a") -> sudo bash -c 'docker ps -a'
-func (w *Wrapper) WrapMultiple(parts ...string) string {
+func (w *SudoWrapper) WrapMultiple(parts ...string) string {
 	command := strings.Join(parts, " ")
 	return w.Wrap(command)
 }
 
 // Enabled 返回是否启用 sudo
-func (w *Wrapper) Enabled() bool {
+func (w *SudoWrapper) Enabled() bool {
 	return w.enabled
 }
 
 // HasPassword 返回是否配置了密码
-func (w *Wrapper) HasPassword() bool {
+func (w *SudoWrapper) HasPassword() bool {
 	return w.password != ""
 }

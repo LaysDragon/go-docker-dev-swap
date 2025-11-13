@@ -1,4 +1,4 @@
-package dlv
+package local
 
 import (
 	"fmt"

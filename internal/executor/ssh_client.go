@@ -1,4 +1,4 @@
-package ssh
+package executor
 
 import (
 	"fmt"
@@ -13,12 +13,12 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-type Client struct {
+type SSHClient struct {
 	client *ssh.Client
 	config *config.RemoteHost
 }
 
-func NewClient(cfg config.RemoteHost) (*Client, error) {
+func NewSSHClient(cfg config.RemoteHost) (*SSHClient, error) {
 	var authMethods []ssh.AuthMethod
 
 	// 密碼認證
@@ -54,17 +54,17 @@ func NewClient(cfg config.RemoteHost) (*Client, error) {
 		return nil, fmt.Errorf("SSH 連接失敗: %w", err)
 	}
 
-	return &Client{
+	return &SSHClient{
 		client: client,
 		config: &cfg,
 	}, nil
 }
 
-func (c *Client) Close() error {
+func (c *SSHClient) Close() error {
 	return c.client.Close()
 }
 
-func (c *Client) CreateSession() (*ssh.Session, error) {
+func (c *SSHClient) CreateSession() (*ssh.Session, error) {
 	session, err := c.client.NewSession()
 	if err != nil {
 		return nil, fmt.Errorf("建立 SSH session 失敗: %w", err)
@@ -72,7 +72,7 @@ func (c *Client) CreateSession() (*ssh.Session, error) {
 	return session, nil
 }
 
-func (c *Client) CreateScript(script, path string) error {
+func (c *SSHClient) CreateScript(script, path string) error {
 	if _, err := c.Execute(fmt.Sprintf("echo -e \"%s\" > %s", script, path)); err != nil {
 		return fmt.Errorf("建立腳本 %s 失敗: %w", path, err)
 	}
@@ -83,7 +83,7 @@ func (c *Client) CreateScript(script, path string) error {
 	return nil
 }
 
-func (c *Client) Execute(command string) (string, error) {
+func (c *SSHClient) Execute(command string) (string, error) {
 	session, err := c.client.NewSession()
 	if err != nil {
 		return "", fmt.Errorf("建立 SSH session 失敗: %w", err)
@@ -98,7 +98,7 @@ func (c *Client) Execute(command string) (string, error) {
 	return string(output), nil
 }
 
-func (c *Client) UploadFile(localPath, remotePath string) error {
+func (c *SSHClient) UploadFile(localPath, remotePath string) error {
 	sftpClient, err := sftp.NewClient(c.client)
 	if err != nil {
 		return fmt.Errorf("建立 SFTP 客戶端失敗: %w", err)
@@ -151,7 +151,7 @@ type Tunnel struct {
 	client   *ssh.Client
 }
 
-func (c *Client) CreateTunnel(localPort, remotePort int) (*Tunnel, error) {
+func (c *SSHClient) CreateTunnel(localPort, remotePort int) (*Tunnel, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", localPort))
 	if err != nil {
 		return nil, fmt.Errorf("建立本地監聽失敗: %w", err)

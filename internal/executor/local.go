@@ -8,20 +8,19 @@ import (
 	"path/filepath"
 
 	"github.com/laysdragon/go-docker-dev-swap/internal/config"
-	"github.com/laysdragon/go-docker-dev-swap/internal/sudo"
 )
 
 // LocalExecutor 本地執行器
 type LocalExecutor struct {
 	config      *config.Config
-	sudoWrapper *sudo.Wrapper
+	sudoWrapper *SudoWrapper
 }
 
 // NewLocalExecutor 創建本地執行器
 func NewLocalExecutor(cfg *config.Config) (*LocalExecutor, error) {
 	return &LocalExecutor{
 		config:      cfg,
-		sudoWrapper: sudo.NewWrapper(cfg.UseSudo, cfg.SudoPassword),
+		sudoWrapper: NewSudoWrapper(cfg.UseSudo, cfg.SudoPassword),
 	}, nil
 }
 

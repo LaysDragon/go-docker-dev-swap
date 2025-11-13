@@ -4,20 +4,19 @@ import (
 	"fmt"
 
 	"github.com/laysdragon/go-docker-dev-swap/internal/config"
-	"github.com/laysdragon/go-docker-dev-swap/internal/ssh"
-	"github.com/laysdragon/go-docker-dev-swap/internal/sudo"
 )
 
 // RemoteExecutor 遠端執行器
 type RemoteExecutor struct {
-	sshClient   *ssh.Client
+	sshClient   *SSHClient
 	config      *config.Config
-	sudoWrapper *sudo.Wrapper
+	sudoWrapper *SudoWrapper
 }
 
 // NewRemoteExecutor 創建遠端執行器
+// NewRemoteExecutor 創建遠端執行器
 func NewRemoteExecutor(cfg *config.Config) (*RemoteExecutor, error) {
-	sshClient, err := ssh.NewClient(cfg.RemoteHost)
+	sshClient, err := NewSSHClient(cfg.RemoteHost)
 	if err != nil {
 		return nil, fmt.Errorf("SSH 連接失敗: %w", err)
 	}
@@ -25,7 +24,7 @@ func NewRemoteExecutor(cfg *config.Config) (*RemoteExecutor, error) {
 	return &RemoteExecutor{
 		sshClient:   sshClient,
 		config:      cfg,
-		sudoWrapper: sudo.NewWrapper(cfg.UseSudo, cfg.SudoPassword),
+		sudoWrapper: NewSudoWrapper(cfg.UseSudo, cfg.SudoPassword),
 	}, nil
 }
 
@@ -64,6 +63,6 @@ func (e *RemoteExecutor) IsRemote() bool {
 }
 
 // GetSSHClient 返回底層的 SSH client (僅用於需要直接訪問的場景)
-func (e *RemoteExecutor) GetSSHClient() *ssh.Client {
+func (e *RemoteExecutor) GetSSHClient() *SSHClient {
 	return e.sshClient
 }
