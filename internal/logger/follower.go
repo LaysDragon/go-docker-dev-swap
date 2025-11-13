@@ -10,7 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/laysdragon/go-docker-dev-swap/internal/config"
 	"github.com/laysdragon/go-docker-dev-swap/internal/executor"
+	"github.com/laysdragon/go-docker-dev-swap/internal/sudo"
 )
 
 type Follower struct {
@@ -19,14 +21,23 @@ type Follower struct {
 	logFile       *os.File
 	enableFile    bool
 	logFilePath   string
+	sudoWrapper   *sudo.Wrapper
+	dockerCmd     string
 }
 
-func NewFollower(exec executor.Executor, containerName string, logFilePath string) *Follower {
+func NewFollower(exec executor.Executor, containerName string, cfg *config.Config) *Follower {
+	dockerCmd := cfg.DockerCommand
+	if dockerCmd == "" {
+		dockerCmd = "docker"
+	}
+	
 	return &Follower{
 		executor:      exec,
 		containerName: containerName,
-		enableFile:    logFilePath != "",
-		logFilePath:   logFilePath,
+		enableFile:    cfg.LogFile != "",
+		logFilePath:   cfg.LogFile,
+		sudoWrapper:   sudo.NewWrapper(cfg.UseSudo, cfg.SudoPassword),
+		dockerCmd:     dockerCmd,
 	}
 }
 
@@ -64,8 +75,8 @@ func (f *Follower) Start(ctx context.Context) error {
 
 // followLogs 持續跟蹤容器日誌
 func (f *Follower) followLogs(ctx context.Context) error {
-	// 檢查容器是否存在
-	checkCmd := fmt.Sprintf("sudo docker ps -q --filter name=^/%s$", f.containerName)
+	// 構建 docker 命令
+	checkCmd := f.buildDockerCmd("ps", "-q", fmt.Sprintf("--filter name=^/%s$", f.containerName))
 	output, err := f.executor.Execute(checkCmd)
 	if err != nil || output == "" {
 		return fmt.Errorf("容器 %s 不存在或未運行", f.containerName)
@@ -73,7 +84,7 @@ func (f *Follower) followLogs(ctx context.Context) error {
 
 	// 使用 docker logs -f 持續跟蹤
 	// 使用 --tail 50 只顯示最近 50 行，避免歷史日誌過多
-	logsCmd := fmt.Sprintf("sudo docker logs -f --tail 50 %s 2>&1", f.containerName)
+	logsCmd := f.buildDockerCmd("logs", "-f", "--tail", "50", f.containerName, "2>&1")
 
 	// 創建統一的 session（本地或遠端）
 	session, err := f.executor.CreateSession()
@@ -165,6 +176,12 @@ func (f *Follower) openLogFile() error {
 	}
 
 	return nil
+}
+
+// buildDockerCmd 構建 docker 命令並根據配置包裝 sudo
+func (f *Follower) buildDockerCmd(args ...string) string {
+	parts := append([]string{f.dockerCmd}, args...)
+	return f.sudoWrapper.WrapMultiple(parts...)
 }
 
 // closeLogFile 關閉日誌文件

@@ -12,6 +12,7 @@ import (
 type Manager struct {
 	executor executor.Executor
 	config   *config.Config
+	cmdBuilder *CommandBuilder
 }
 
 type ContainerConfig struct {
@@ -33,14 +34,15 @@ type DevContainer struct {
 
 func NewManager(exec executor.Executor, cfg *config.Config) *Manager {
 	return &Manager{
-		executor: exec,
-		config:   cfg,
+		executor:   exec,
+		config:     cfg,
+		cmdBuilder: NewCommandBuilder(cfg),
 	}
 }
 
 func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, error) {
 	// 獲取容器 ID
-	cmd := fmt.Sprintf("cd %s && sudo docker compose ps -q %s -a", m.config.ComposeDir, serviceName)
+	cmd := m.cmdBuilder.DockerCompose(m.config.ComposeDir, "ps", "-q", serviceName, "-a")
 	containerID, err := m.executor.Execute(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("獲取容器 ID 失敗: %w", err)
@@ -48,7 +50,7 @@ func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, erro
 	containerID = strings.TrimSpace(containerID)
 
 	// 獲取容器詳細資訊
-	cmd = fmt.Sprintf("sudo docker inspect %s", containerID)
+	cmd = m.cmdBuilder.Docker("inspect", containerID)
 	output, err := m.executor.Execute(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("獲取容器資訊失敗: %w", err)
@@ -125,7 +127,7 @@ func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, erro
 }
 
 func (m *Manager) StopContainer(serviceName string) error {
-	cmd := fmt.Sprintf("cd %s && sudo docker compose stop %s", m.config.ComposeDir, serviceName)
+	cmd := m.cmdBuilder.DockerCompose(m.config.ComposeDir, "stop", serviceName)
 	_, err := m.executor.Execute(cmd)
 	return err
 }
@@ -133,7 +135,7 @@ func (m *Manager) StopContainer(serviceName string) error {
 // CheckDevContainerExists 檢查開發容器是否已存在並驗證是否為本工具創建的
 func (m *Manager) CheckDevContainerExists(devName string) (exists bool, isDevSwap bool, containerID string, err error) {
 	// 檢查容器是否存在
-	cmd := fmt.Sprintf("sudo docker ps -a --filter name=^/%s$ --format '{{.ID}}'", devName)
+	cmd := m.cmdBuilder.Docker("ps", "-a", fmt.Sprintf("--filter name=^/%s$", devName), "--format '{{.ID}}'")
 	output, err := m.executor.Execute(cmd)
 	if err != nil {
 		return false, false, "", fmt.Errorf("檢查容器失敗: %w", err)
@@ -145,7 +147,7 @@ func (m *Manager) CheckDevContainerExists(devName string) (exists bool, isDevSwa
 	}
 
 	// 容器存在，檢查是否有 dev-swap=true 標籤
-	cmd = fmt.Sprintf("sudo docker inspect %s --format '{{index .Config.Labels \"dev-swap\"}}'", containerID)
+	cmd = m.cmdBuilder.Docker("inspect", containerID, "--format '{{index .Config.Labels \"dev-swap\"}}'")
 	output, err = m.executor.Execute(cmd)
 	if err != nil {
 		return true, false, containerID, fmt.Errorf("檢查容器標籤失敗: %w", err)
@@ -171,7 +173,7 @@ func (m *Manager) RemoveDevContainerIfExists(devName string) error {
 	}
 
 	// 移除容器
-	cmd := fmt.Sprintf("sudo docker rm -f %s", containerID)
+	cmd := m.cmdBuilder.Docker("rm", "-f", containerID)
 	_, err = m.executor.Execute(cmd)
 	if err != nil {
 		return fmt.Errorf("移除殘留容器失敗: %w", err)
@@ -199,7 +201,7 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 
 	// 構建 docker run 命令
 	var cmdParts []string
-	cmdParts = append(cmdParts, "sudo docker run -d")
+	cmdParts = append(cmdParts, "run -d")
 	cmdParts = append(cmdParts, fmt.Sprintf("--name %s", devName))
 
 	// 環境變數
@@ -275,7 +277,8 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 		return nil, fmt.Errorf("上傳入口腳本失敗: %w", err)
 	}
 
-	cmd := strings.Join(cmdParts, " ")
+	// 使用 CommandBuilder 構建完整的 docker 命令
+	cmd := m.cmdBuilder.Docker(cmdParts...)
 	fmt.Printf("執行命令: %s\n", cmd)
 	output, err := m.executor.Execute(cmd)
 	if err != nil {
@@ -289,25 +292,25 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, cfg *config.Conf
 }
 
 func (m *Manager) StartContainer(name string) error {
-	cmd := fmt.Sprintf("sudo docker start %s", name)
+	cmd := m.cmdBuilder.Docker("start", name)
 	_, err := m.executor.Execute(cmd)
 	return err
 }
 
 func (m *Manager) RestartContainer(name string) error {
-	cmd := fmt.Sprintf("sudo docker restart %s", name)
+	cmd := m.cmdBuilder.Docker("restart", name)
 	_, err := m.executor.Execute(cmd)
 	return err
 }
 
 func (m *Manager) RemoveDevContainer(name string) error {
-	cmd := fmt.Sprintf("sudo docker rm -f %s", name)
+	cmd := m.cmdBuilder.Docker("rm", "-f", name)
 	_, err := m.executor.Execute(cmd)
 	return err
 }
 
 func (m *Manager) RestoreOriginalContainer(serviceName string) error {
-	cmd := fmt.Sprintf("cd %s && sudo docker compose start %s", m.config.ComposeDir, serviceName)
+	cmd := m.cmdBuilder.DockerCompose(m.config.ComposeDir, "start", serviceName)
 	_, err := m.executor.Execute(cmd)
 	return err
 }

@@ -26,7 +26,7 @@ func (e *LocalExecutor) Execute(command string) (string, error) {
 	cmd := exec.Command("bash", "-c", command)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return string(output), fmt.Errorf("執行命令失敗: %w (%s)", err, output)
+		return string(output), fmt.Errorf("執行命令失敗: %w (%s)=>(%s)", err, command,output)
 	}
 	return string(output), nil
 }

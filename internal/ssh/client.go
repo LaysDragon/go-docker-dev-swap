@@ -92,7 +92,7 @@ func (c *Client) Execute(command string) (string, error) {
 
 	output, err := session.CombinedOutput(command)
 	if err != nil {
-		return string(output), fmt.Errorf("執行命令失敗: %w (%s)", err, output)
+		return string(output),fmt.Errorf("執行命令失敗: %w (%s)=>(%s)", err, command,output)
 	}
 
 	return string(output), nil

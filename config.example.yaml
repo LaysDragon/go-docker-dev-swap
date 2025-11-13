@@ -38,6 +38,24 @@ local_binary: "./bin/api-service"            # [必要] 本地二進制文件路
 # 容器內的執行檔路徑
 # container_binary_path: "/app/service"      # [可選] 默認: /app/service
 
+# ============================================
+# Sudo 提權配置
+# ============================================
+# 通用的 sudo 包裝機制，適用於所有需要提權的命令
+# 使用臨時提權 bash 執行命令，提高兼容性
+
+# use_sudo: false                            # [可選] 是否使用 sudo 執行命令，默認: false
+# sudo_password: ""                          # [可選] sudo 提權密碼（如需要），默認: "" (無密碼)
+#                                            #        ⚠️ 安全建議：使用環境變量 DDS_SUDO_PASSWORD 而非配置文件
+#                                            #        ⚠️ 生產環境建議配置 NOPASSWD 避免密碼存儲
+
+# ============================================
+# Docker 命令配置
+# ============================================
+# docker_command: "docker"                   # [可選] docker 命令路徑，默認: docker
+# docker_compose_command: "docker compose"   # [可選] docker compose 命令，默認: docker compose
+#                                            #        可選值: "docker compose" (V2) 或 "docker-compose" (V1)
+
 # Debugger 端口 (本地監聽端口)
 # debugger_port: 2345                        # [可選] 默認: 2345
 

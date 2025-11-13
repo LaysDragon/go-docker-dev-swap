@@ -8,19 +8,25 @@ import (
 )
 
 type Config struct {
-	Mode                string     `mapstructure:"mode"` // "local" 或 "remote"，預設 "remote"
-	RemoteHost          RemoteHost `mapstructure:"remote_host"`
-	ComposeDir          string     `mapstructure:"compose_dir"`
-	TargetService       string     `mapstructure:"target_service"`
-	LocalBinary         string     `mapstructure:"local_binary"`
-	RemoteWorkDir       string     `mapstructure:"remote_work_dir"`    // 遠端工作目錄（本地模式也使用此路徑）
-	RemoteBinaryName    string     `mapstructure:"remote_binary_name"` // 遠端執行檔名稱
-	ContainerBinaryPath string     `mapstructure:"container_binary_path"`
-	DebuggerPort        int        `mapstructure:"debugger_port"`
-	ExtraPorts          []int      `mapstructure:"extra_ports"`
-	DlvConfig           DlvConfig  `mapstructure:"dlv_config"`
-	InitialScripts      string     `mapstructure:"initial_scripts"`
-	LogFile             string     `mapstructure:"log_file"` // 本地日誌文件路徑（可選）
+	Mode                 string     `mapstructure:"mode"` // "local" 或 "remote"，預設 "remote"
+	RemoteHost           RemoteHost `mapstructure:"remote_host"`
+	ComposeDir           string     `mapstructure:"compose_dir"`
+	TargetService        string     `mapstructure:"target_service"`
+	LocalBinary          string     `mapstructure:"local_binary"`
+	RemoteWorkDir        string     `mapstructure:"remote_work_dir"`    // 遠端工作目錄（本地模式也使用此路徑）
+	RemoteBinaryName     string     `mapstructure:"remote_binary_name"` // 遠端執行檔名稱
+	ContainerBinaryPath  string     `mapstructure:"container_binary_path"`
+	DebuggerPort         int        `mapstructure:"debugger_port"`
+	ExtraPorts           []int      `mapstructure:"extra_ports"`
+	DlvConfig            DlvConfig  `mapstructure:"dlv_config"`
+	InitialScripts       string     `mapstructure:"initial_scripts"`
+	LogFile              string     `mapstructure:"log_file"` // 本地日誌文件路徑（可選）
+	
+	// Docker 命令配置
+	UseSudo              bool       `mapstructure:"use_sudo"`               // 是否使用 sudo
+	SudoPassword         string     `mapstructure:"sudo_password"`          // sudo 密碼（可選）
+	DockerCommand        string     `mapstructure:"docker_command"`         // docker 命令（默認 "docker"）
+	DockerComposeCommand string     `mapstructure:"docker_compose_command"` // docker-compose 命令（默認 "docker compose"）
 }
 
 type RemoteHost struct {
@@ -132,6 +138,12 @@ func setDefaults(v *viper.Viper) {
 
 	// 日誌文件預設值 (空字符串表示不寫入文件)
 	v.SetDefault("log_file", "")
+	
+	// Docker 命令配置預設值
+	v.SetDefault("use_sudo", false)
+	v.SetDefault("sudo_password", "")
+	v.SetDefault("docker_command", "docker")
+	v.SetDefault("docker_compose_command", "docker compose")
 }
 
 // validateConfig 驗證必要配置項
