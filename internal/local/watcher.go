@@ -10,26 +10,29 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-type Watcher struct {
+// FileWatcher 監控本地文件變化
+type FileWatcher struct {
 	path     string
 	callback func(string)
 }
 
-func New(path string, callback func(string)) *Watcher {
-	return &Watcher{
+// NewFileWatcher 創建文件監控器
+func NewFileWatcher(path string, callback func(string)) *FileWatcher {
+	return &FileWatcher{
 		path:     path,
 		callback: callback,
 	}
 }
 
-func (w *Watcher) Start(ctx context.Context) error {
+// Start 開始監控文件變化
+func (fw *FileWatcher) Start(ctx context.Context) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("建立檔案監控器失敗: %w", err)
 	}
 
 	// 監控檔案所在的目錄
-	dir := filepath.Dir(w.path)
+	dir := filepath.Dir(fw.path)
 	if err := watcher.Add(dir); err != nil {
 		return fmt.Errorf("添加監控目錄失敗: %w", err)
 	}
@@ -53,9 +56,9 @@ func (w *Watcher) Start(ctx context.Context) error {
 
 				// 只關注目標檔案的寫入和建立事件
 				// it event.op always be trigger as chmod event with go build under wsl for some reason
-				//if event.Name == w.path && (event.Op&fsnotify.Write == fsnotify.Write ||
+				//if event.Name == fw.path && (event.Op&fsnotify.Write == fsnotify.Write ||
 				//	event.Op&fsnotify.Create == fsnotify.Create) {
-				if event.Name == w.path {
+				if event.Name == fw.path {
 
 					// 重置防抖動計時器
 					if debounceTimer != nil {
@@ -63,7 +66,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 					}
 
 					debounceTimer = time.AfterFunc(debounceDelay, func() {
-						w.callback(event.Name)
+						fw.callback(event.Name)
 					})
 				}
 

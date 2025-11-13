@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// FindLocal 查找本地 dlv 路徑
+// FindDlv 查找本地 Delve 調試器執行檔路徑
 // 如果 configPath 不為空，則使用配置的路徑；否則使用 which 命令搜尋
-func FindLocal(configPath string) (string, error) {
+func FindDlv(configPath string) (string, error) {
 	// 如果配置中指定了 dlv 路徑，直接使用
 	if configPath != "" {
 		// 檢查配置的路徑是否存在
@@ -27,15 +27,15 @@ func FindLocal(configPath string) (string, error) {
 		return "", nil
 	}
 
-	localDlvPath := strings.TrimSpace(string(output))
-	if localDlvPath == "" {
+	dlvPath := strings.TrimSpace(string(output))
+	if dlvPath == "" {
 		return "", nil
 	}
 
 	// 檢查文件是否真的存在
-	if _, err := os.Stat(localDlvPath); os.IsNotExist(err) {
+	if _, err := os.Stat(dlvPath); os.IsNotExist(err) {
 		return "", nil
 	}
 
-	return localDlvPath, nil
+	return dlvPath, nil
 }

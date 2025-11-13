@@ -11,10 +11,9 @@ import (
 	"syscall"
 
 	"github.com/laysdragon/go-docker-dev-swap/internal/config"
-	"github.com/laysdragon/go-docker-dev-swap/internal/dlv"
 	"github.com/laysdragon/go-docker-dev-swap/internal/docker"
 	"github.com/laysdragon/go-docker-dev-swap/internal/executor"
-	"github.com/laysdragon/go-docker-dev-swap/internal/watcher"
+	"github.com/laysdragon/go-docker-dev-swap/internal/local"
 )
 
 var (
@@ -93,7 +92,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, exe
 		log.Println("查找本地 dlv...")
 
 		// 查找 dlv
-		localDlvPath, err := dlv.FindLocal(cfg.DlvConfig.LocalPath)
+		localDlvPath, err := local.FindDlv(cfg.DlvConfig.LocalPath)
 		if err != nil {
 			log.Printf("查找 dlv 失敗: %v", err)
 		} else if localDlvPath != "" {
@@ -203,7 +202,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, exe
 
 	// 8. 啟動檔案監控
 	log.Println("啟動檔案監控...")
-	fileWatcher := watcher.New(cfg.LocalBinary, func(path string) {
+	fileWatcher := local.NewFileWatcher(cfg.LocalBinary, func(path string) {
 		log.Printf("偵測到檔案更新: %s", path)
 
 		// 上傳新檔案
