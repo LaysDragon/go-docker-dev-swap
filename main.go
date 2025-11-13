@@ -14,7 +14,6 @@ import (
 	"github.com/laysdragon/go-docker-dev-swap/internal/dlv"
 	"github.com/laysdragon/go-docker-dev-swap/internal/docker"
 	"github.com/laysdragon/go-docker-dev-swap/internal/executor"
-	"github.com/laysdragon/go-docker-dev-swap/internal/logger"
 	"github.com/laysdragon/go-docker-dev-swap/internal/watcher"
 )
 
@@ -234,7 +233,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, cfg *config.Config, exe
 		log.Printf("日誌將寫入文件: %s", cfg.LogFile)
 	}
 
-	logFollower := logger.NewFollower(exec, devContainer.Name, cfg)
+	logFollower := docker.NewLogFollower(exec, dockerMgr, devContainer.Name, cfg)
 	go func() {
 		if err := logFollower.Start(ctx); err != nil && err != context.Canceled {
 			log.Printf("日誌監控停止: %v", err)

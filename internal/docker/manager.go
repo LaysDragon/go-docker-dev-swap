@@ -314,3 +314,15 @@ func (m *Manager) RestoreOriginalContainer(serviceName string) error {
 	_, err := m.executor.Execute(cmd)
 	return err
 }
+
+// CheckContainerRunning 檢查容器是否正在運行
+func (m *Manager) CheckContainerRunning(containerName string) (bool, error) {
+	cmd := m.cmdBuilder.Docker("ps", "-q", fmt.Sprintf("--filter name=^/%s$", containerName))
+	output, err := m.executor.Execute(cmd)
+	if err != nil {
+		return false, fmt.Errorf("檢查容器運行狀態失敗: %w", err)
+	}
+	
+	containerID := strings.TrimSpace(output)
+	return containerID != "", nil
+}

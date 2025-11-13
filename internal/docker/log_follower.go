@@ -1,4 +1,4 @@
-package logger
+package docker
 
 import (
 	"bufio"
@@ -11,25 +11,26 @@ import (
 	"time"
 
 	"github.com/laysdragon/go-docker-dev-swap/internal/config"
-	"github.com/laysdragon/go-docker-dev-swap/internal/docker"
 	"github.com/laysdragon/go-docker-dev-swap/internal/executor"
 )
 
-type Follower struct {
+// LogFollower 容器日誌監控器
+type LogFollower struct {
 	executor      executor.Executor
-	manager       *docker.Manager
-	cmdBuilder    *docker.CommandBuilder
+	manager       *Manager
+	cmdBuilder    *CommandBuilder
 	containerName string
 	logFile       *os.File
 	enableFile    bool
 	logFilePath   string
 }
 
-func NewFollower(exec executor.Executor, manager *docker.Manager, containerName string, cfg *config.Config) *Follower {
-	return &Follower{
+// NewLogFollower 創建日誌監控器
+func NewLogFollower(exec executor.Executor, manager *Manager, containerName string, cfg *config.Config) *LogFollower {
+	return &LogFollower{
 		executor:      exec,
 		manager:       manager,
-		cmdBuilder:    docker.NewCommandBuilder(cfg),
+		cmdBuilder:    NewCommandBuilder(cfg),
 		containerName: containerName,
 		enableFile:    cfg.LogFile != "",
 		logFilePath:   cfg.LogFile,
@@ -37,13 +38,13 @@ func NewFollower(exec executor.Executor, manager *docker.Manager, containerName 
 }
 
 // Start 開始監控容器日誌
-func (f *Follower) Start(ctx context.Context) error {
+func (lf *LogFollower) Start(ctx context.Context) error {
 	// 如果需要寫入文件，創建日誌文件
-	if f.enableFile {
-		if err := f.openLogFile(); err != nil {
+	if lf.enableFile {
+		if err := lf.openLogFile(); err != nil {
 			return fmt.Errorf("創建日誌文件失敗: %w", err)
 		}
-		defer f.closeLogFile()
+		defer lf.closeLogFile()
 	}
 
 	// 持續監控日誌，應對容器重啟
@@ -52,7 +53,7 @@ func (f *Follower) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		default:
-			if err := f.followLogs(ctx); err != nil {
+			if err := lf.followLogs(ctx); err != nil {
 				log.Printf("日誌監控中斷: %v", err)
 				log.Println("等待 3 秒後重新連接...")
 
@@ -69,20 +70,22 @@ func (f *Follower) Start(ctx context.Context) error {
 }
 
 // followLogs 持續跟蹤容器日誌
-func (f *Follower) followLogs(ctx context.Context) error {
-	// 使用 CommandBuilder 構建 docker 命令
-	checkCmd := f.cmdBuilder.Docker("ps", "-q", fmt.Sprintf("--filter name=^/%s$", f.containerName))
-	output, err := f.executor.Execute(checkCmd)
-	if err != nil || output == "" {
-		return fmt.Errorf("容器 %s 不存在或未運行", f.containerName)
+func (lf *LogFollower) followLogs(ctx context.Context) error {
+	// 使用 Manager 檢查容器是否運行
+	running, err := lf.manager.CheckContainerRunning(lf.containerName)
+	if err != nil {
+		return fmt.Errorf("檢查容器失敗: %w", err)
+	}
+	if !running {
+		return fmt.Errorf("容器 %s 不存在或未運行", lf.containerName)
 	}
 
 	// 使用 docker logs -f 持續跟蹤
 	// 使用 --tail 50 只顯示最近 50 行，避免歷史日誌過多
-	logsCmd := f.cmdBuilder.Docker("logs", "-f", "--tail", "50", f.containerName, "2>&1")
+	logsCmd := lf.cmdBuilder.Docker("logs", "-f", "--tail", "50", lf.containerName, "2>&1")
 
 	// 創建統一的 session（本地或遠端）
-	session, err := f.executor.CreateSession()
+	session, err := lf.executor.CreateSession()
 	if err != nil {
 		return fmt.Errorf("創建 session 失敗: %w", err)
 	}
@@ -99,11 +102,11 @@ func (f *Follower) followLogs(ctx context.Context) error {
 		return fmt.Errorf("獲取標準輸出失敗: %w", err)
 	}
 
-	return f.streamLogs(ctx, stdout, session)
+	return lf.streamLogs(ctx, stdout, session)
 }
 
 // streamLogs 統一處理日誌流
-func (f *Follower) streamLogs(ctx context.Context, stdout io.Reader, session interface {
+func (lf *LogFollower) streamLogs(ctx context.Context, stdout io.Reader, session interface {
 	Close() error
 	Wait() error
 }) error {
@@ -113,7 +116,7 @@ func (f *Follower) streamLogs(ctx context.Context, stdout io.Reader, session int
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			line := scanner.Text()
-			f.processLogLine(line)
+			lf.processLogLine(line)
 		}
 
 		if err := scanner.Err(); err != nil && err != io.EOF {
@@ -135,38 +138,38 @@ func (f *Follower) streamLogs(ctx context.Context, stdout io.Reader, session int
 }
 
 // processLogLine 處理單行日誌
-func (f *Follower) processLogLine(line string) {
+func (lf *LogFollower) processLogLine(line string) {
 	// 輸出到控制台
 	fmt.Println(line)
 
 	// 寫入文件（如果啟用）
-	if f.enableFile && f.logFile != nil {
-		if _, err := f.logFile.WriteString(line + "\n"); err != nil {
+	if lf.enableFile && lf.logFile != nil {
+		if _, err := lf.logFile.WriteString(line + "\n"); err != nil {
 			log.Printf("寫入日誌文件失敗: %v", err)
 		}
 	}
 }
 
 // openLogFile 打開日誌文件
-func (f *Follower) openLogFile() error {
+func (lf *LogFollower) openLogFile() error {
 	// 確保目錄存在
-	dir := filepath.Dir(f.logFilePath)
+	dir := filepath.Dir(lf.logFilePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("創建日誌目錄失敗: %w", err)
 	}
 
 	// 打開文件（追加模式）
-	file, err := os.OpenFile(f.logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(lf.logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return fmt.Errorf("打開日誌文件失敗: %w", err)
 	}
 
-	f.logFile = file
+	lf.logFile = file
 
 	// 寫入分隔線和時間戳
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	separator := fmt.Sprintf("\n=== 日誌開始 [%s] ===\n", timestamp)
-	if _, err := f.logFile.WriteString(separator); err != nil {
+	if _, err := lf.logFile.WriteString(separator); err != nil {
 		return fmt.Errorf("寫入分隔線失敗: %w", err)
 	}
 
@@ -174,14 +177,14 @@ func (f *Follower) openLogFile() error {
 }
 
 // closeLogFile 關閉日誌文件
-func (f *Follower) closeLogFile() {
-	if f.logFile != nil {
+func (lf *LogFollower) closeLogFile() {
+	if lf.logFile != nil {
 		// 寫入結束標記
 		timestamp := time.Now().Format("2006-01-02 15:04:05")
 		separator := fmt.Sprintf("=== 日誌結束 [%s] ===\n\n", timestamp)
-		f.logFile.WriteString(separator)
+		lf.logFile.WriteString(separator)
 
-		f.logFile.Close()
-		f.logFile = nil
+		lf.logFile.Close()
+		lf.logFile = nil
 	}
 }
