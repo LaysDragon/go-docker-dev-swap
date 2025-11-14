@@ -228,7 +228,30 @@ func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfi
 		// 重啟容器
 		log.Println("重啟開發容器...")
 		if err := dockerMgr.RestartContainer(devContainer.Name); err != nil {
-			log.Printf("重啟失敗: %v", err)
+			log.Printf("重啟失敗: %v，嘗試重新創建容器...", err)
+
+			// 重啟失敗，嘗試重新創建容器
+			log.Println("移除舊容器...")
+			if err := dockerMgr.RemoveDevContainer(devContainer.Name); err != nil {
+				log.Printf("移除容器失敗: %v", err)
+				return
+			}
+
+			log.Println("重新創建開發容器...")
+			newDevContainer, err := dockerMgr.CreateDevContainer(originalContainer, remoteDlvPath)
+			if err != nil {
+				log.Printf("創建容器失敗: %v", err)
+				return
+			}
+			devContainer = newDevContainer
+
+			log.Println("啟動新容器...")
+			if err := dockerMgr.StartContainer(devContainer.Name); err != nil {
+				log.Printf("啟動容器失敗: %v", err)
+				return
+			}
+
+			log.Println("容器已重新創建並啟動，新版本已部署")
 			return
 		}
 
