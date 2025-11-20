@@ -16,7 +16,7 @@ func (cfg *Config) InteractiveSelect() (*RuntimeConfig, error) {
 // selectMultiConfig 互動式選擇多組配置
 func (cfg *Config) selectMultiConfig() (*RuntimeConfig, error) {
 	var componentName, hostName, projectName string
-	
+
 	// 準備組件選項
 	componentKeys := sortedKeys(cfg.Components)
 	componentOptions := make([]huh.Option[string], len(componentKeys))
@@ -27,7 +27,7 @@ func (cfg *Config) selectMultiConfig() (*RuntimeConfig, error) {
 			key,
 		)
 	}
-	
+
 	// 準備主機選項
 	hostKeys := sortedKeys(cfg.Hosts)
 	hostOptions := make([]huh.Option[string], len(hostKeys))
@@ -42,7 +42,7 @@ func (cfg *Config) selectMultiConfig() (*RuntimeConfig, error) {
 			key,
 		)
 	}
-	
+
 	// 建立表單（先選擇組件和主機）
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -50,38 +50,39 @@ func (cfg *Config) selectMultiConfig() (*RuntimeConfig, error) {
 				Title("選擇本地組件").
 				Options(componentOptions...).
 				Value(&componentName),
-			
+
 			huh.NewSelect[string]().
 				Title("選擇主機").
 				Options(hostOptions...).
 				Value(&hostName),
 		),
 	)
-	
+
 	// 執行表單
 	if err := form.Run(); err != nil {
 		return nil, fmt.Errorf("選擇失敗: %w", err)
 	}
-	
+
 	// 設定選擇的組件和主機
 	selectedComponent := cfg.Components[componentName]
 	selectedHost := cfg.Hosts[hostName]
-	
+
 	// 選擇該主機上的專案
 	if len(selectedHost.Projects) == 0 {
 		return nil, fmt.Errorf("主機 '%s' 沒有可用的專案配置", hostName)
 	}
-	
+
 	projectKeys := sortedKeys(selectedHost.Projects)
 	projectOptions := make([]huh.Option[string], len(projectKeys))
 	for i, key := range projectKeys {
 		p := selectedHost.Projects[key]
-		projectOptions[i] = huh.NewOption(
-			fmt.Sprintf("%s (compose: %s)", p.Name, p.ComposeDir),
-			key,
-		)
+		label := fmt.Sprintf("%s (compose: %s)", p.Name, p.ComposeDir)
+		if p.Type == ProjectTypeContainer {
+			label = fmt.Sprintf("%s (docker container: %s)", p.Name, selectedComponent.TargetService)
+		}
+		projectOptions[i] = huh.NewOption(label, key)
 	}
-	
+
 	projectForm := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -90,27 +91,27 @@ func (cfg *Config) selectMultiConfig() (*RuntimeConfig, error) {
 				Value(&projectName),
 		),
 	)
-	
+
 	if err := projectForm.Run(); err != nil {
 		return nil, fmt.Errorf("選擇專案失敗: %w", err)
 	}
-	
+
 	selectedProject := selectedHost.Projects[projectName]
-	
+
 	// 合併 Component 和全局預設值（就地修改 selectedComponent）
 	// 如果 Component 中的欄位為 nil，使用全局預設值覆蓋
 	if selectedComponent.LogFile == nil || *selectedComponent.LogFile == "" {
 		selectedComponent.LogFile = &cfg.LogFile
 	}
-	
+
 	if selectedComponent.InitialScripts == nil || *selectedComponent.InitialScripts == "" {
 		selectedComponent.InitialScripts = &cfg.InitialScripts
 	}
-	
+
 	if selectedComponent.DlvConfig == nil {
 		selectedComponent.DlvConfig = &cfg.DlvConfig
 	}
-	
+
 	// 建立 RuntimeConfig（現在 selectedComponent 保證所有欄位都有值）
 	rc := &RuntimeConfig{
 		Mode:                 selectedHost.Mode,
@@ -122,7 +123,7 @@ func (cfg *Config) selectMultiConfig() (*RuntimeConfig, error) {
 		DockerCommand:        selectedHost.DockerCommand,
 		DockerComposeCommand: selectedHost.DockerComposeCommand,
 	}
-	
+
 	return rc, nil
 }
 
@@ -131,31 +132,31 @@ func selectFromMap[T any](prompt string, items map[string]T, displayFunc func(T)
 	if len(items) == 0 {
 		return "", fmt.Errorf("沒有可選項")
 	}
-	
+
 	// 如果只有一個選項，直接返回
 	if len(items) == 1 {
 		for key := range items {
 			return key, nil
 		}
 	}
-	
+
 	// 收集所有選項並排序（確保順序一致）
 	keys := make([]string, 0, len(items))
 	for key := range items {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	
+
 	// 建立選項列表
 	options := make([]huh.Option[string], len(keys))
 	for i, key := range keys {
 		item := items[key]
 		options[i] = huh.NewOption(displayFunc(item), key)
 	}
-	
+
 	// 選擇的結果
 	var selected string
-	
+
 	// 建立選擇表單
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -165,12 +166,12 @@ func selectFromMap[T any](prompt string, items map[string]T, displayFunc func(T)
 				Value(&selected),
 		),
 	)
-	
+
 	// 執行表單
 	if err := form.Run(); err != nil {
 		return "", fmt.Errorf("選擇失敗: %w", err)
 	}
-	
+
 	return selected, nil
 }
 

@@ -7,13 +7,19 @@ import (
 	"github.com/spf13/viper"
 )
 
+const (
+	ProjectTypeCompose        = "compose"
+	ProjectTypeContainer      = "container"
+	defaultContainerProjectID = "docker-container"
+)
+
 // Config 主配置結構，支援多組組件、主機和專案配置
 type Config struct {
 	// 全域預設值（可被 Component 層級覆蓋）
 	LogFile        string    `mapstructure:"log_file"`        // 日誌文件路徑預設值
 	InitialScripts string    `mapstructure:"initial_scripts"` // 初始化腳本預設值
 	DlvConfig      DlvConfig `mapstructure:"dlv_config"`      // Delve 配置預設值
-	
+
 	// 多組配置
 	Components map[string]Component `mapstructure:"components"` // 本地組件配置（key 為組件名稱）
 	Hosts      map[string]Host      `mapstructure:"hosts"`      // 主機配置（key 為主機名稱）
@@ -34,25 +40,25 @@ type Component struct {
 
 // Host 主機配置（包含 mode、sudo、docker、projects）
 type Host struct {
-	Name     string `mapstructure:"name"`      // 主機名稱（顯示用）
-	Mode     string `mapstructure:"mode"`      // "local" 或 "remote"
-	Host     string `mapstructure:"host"`      // 主機地址（remote 模式需要）
-	Port     int    `mapstructure:"port"`      // SSH 端口（remote 模式）
-	User     string `mapstructure:"user"`      // SSH 用戶名（remote 模式需要）
-	Password string `mapstructure:"password"`  // SSH 密碼（remote 模式）
-	KeyFile  string `mapstructure:"key_file"`  // SSH 私鑰路徑（remote 模式）
-	
+	Name     string `mapstructure:"name"`     // 主機名稱（顯示用）
+	Mode     string `mapstructure:"mode"`     // "local" 或 "remote"
+	Host     string `mapstructure:"host"`     // 主機地址（remote 模式需要）
+	Port     int    `mapstructure:"port"`     // SSH 端口（remote 模式）
+	User     string `mapstructure:"user"`     // SSH 用戶名（remote 模式需要）
+	Password string `mapstructure:"password"` // SSH 密碼（remote 模式）
+	KeyFile  string `mapstructure:"key_file"` // SSH 私鑰路徑（remote 模式）
+
 	RemoteWorkDir    string `mapstructure:"remote_work_dir"`    // 遠端工作目錄（remote 模式）
 	RemoteBinaryName string `mapstructure:"remote_binary_name"` // 遠端執行檔名稱（remote 模式）
-	
+
 	// Sudo 配置
 	UseSudo      bool   `mapstructure:"use_sudo"`      // 是否使用 sudo
 	SudoPassword string `mapstructure:"sudo_password"` // sudo 密碼
-	
+
 	// Docker 命令配置
 	DockerCommand        string `mapstructure:"docker_command"`         // docker 命令
 	DockerComposeCommand string `mapstructure:"docker_compose_command"` // docker-compose 命令
-	
+
 	// 專案列表
 	Projects map[string]Project `mapstructure:"projects"` // 該主機上的專案配置
 }
@@ -60,7 +66,8 @@ type Host struct {
 // Project 專案配置（對應一個 docker-compose 專案）
 type Project struct {
 	Name       string `mapstructure:"name"`        // 專案名稱（顯示用）
-	ComposeDir string `mapstructure:"compose_dir"` // docker-compose.yml 所在目錄
+	Type       string `mapstructure:"type"`        // 專案類型：compose 或 container
+	ComposeDir string `mapstructure:"compose_dir"` // docker-compose.yml 所在目錄（compose 類型需要）
 }
 
 // DlvConfig Delve 調試器配置
@@ -103,14 +110,14 @@ var defaultValues = struct {
 		Args      string
 		LocalPath string
 	}
-	
+
 	// Component 預設值
 	Component struct {
 		ContainerBinaryPath string
 		DebuggerPort        int
 		ExtraPorts          []int
 	}
-	
+
 	// Host 預設值
 	Host struct {
 		Mode                 string
@@ -137,7 +144,7 @@ var defaultValues = struct {
 		Args:      "",
 		LocalPath: "",
 	},
-	
+
 	// Component 預設值
 	Component: struct {
 		ContainerBinaryPath string
@@ -148,7 +155,7 @@ var defaultValues = struct {
 		DebuggerPort:        2345,
 		ExtraPorts:          []int{},
 	},
-	
+
 	// Host 預設值
 	Host: struct {
 		Mode                 string
@@ -244,7 +251,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("dlv_config.port", defaultValues.DlvConfig.Port)
 	v.SetDefault("dlv_config.args", defaultValues.DlvConfig.Args)
 	v.SetDefault("dlv_config.local_path", defaultValues.DlvConfig.LocalPath)
-	
+
 	// 注意：Components、Hosts 是 map，無法在此設定預設值
 	// 它們的預設值會在 validateConfig 中針對每個項目設定
 }
@@ -256,12 +263,12 @@ func validateConfig(cfg *Config) error {
 	if len(cfg.Components) == 0 {
 		return fmt.Errorf("必須至少定義一個 component")
 	}
-	
+
 	// 至少要有一個主機
 	if len(cfg.Hosts) == 0 {
 		return fmt.Errorf("必須至少定義一個 host")
 	}
-	
+
 	// 驗證每個組件
 	for name, comp := range cfg.Components {
 		if comp.LocalBinary == "" {
@@ -270,14 +277,14 @@ func validateConfig(cfg *Config) error {
 		if comp.TargetService == "" {
 			return fmt.Errorf("component '%s': target_service 為必要配置", name)
 		}
-		
+
 		// 驗證並轉換路徑
 		binaryPath, err := filepath.Abs(comp.LocalBinary)
 		if err != nil {
 			return fmt.Errorf("component '%s': 無法解析 local_binary 路徑: %w", name, err)
 		}
 		comp.LocalBinary = binaryPath
-		
+
 		// 設定組件預設值
 		if comp.ContainerBinaryPath == "" {
 			comp.ContainerBinaryPath = defaultValues.Component.ContainerBinaryPath
@@ -288,13 +295,13 @@ func validateConfig(cfg *Config) error {
 		if comp.ExtraPorts == nil {
 			comp.ExtraPorts = defaultValues.Component.ExtraPorts
 		}
-		
+
 		// LogFile, InitialScripts, DlvConfig 如果為 nil，表示使用全局預設值
 		// 在 InteractiveSelect 時會處理合併邏輯
-		
+
 		cfg.Components[name] = comp
 	}
-	
+
 	// 驗證每個主機
 	for name, host := range cfg.Hosts {
 		// 驗證 mode
@@ -304,7 +311,7 @@ func validateConfig(cfg *Config) error {
 		if host.Mode != "local" && host.Mode != "remote" {
 			return fmt.Errorf("host '%s': mode 必須是 'local' 或 'remote'", name)
 		}
-		
+
 		// 遠端模式需要連接資訊
 		if host.Mode == "remote" {
 			if host.Host == "" {
@@ -316,7 +323,7 @@ func validateConfig(cfg *Config) error {
 			if host.Password == "" && host.KeyFile == "" {
 				return fmt.Errorf("host '%s': 必須提供 password 或 key_file 其中之一", name)
 			}
-			
+
 			// 驗證 key_file 路徑
 			if host.KeyFile != "" {
 				keyPath, err := filepath.Abs(host.KeyFile)
@@ -325,7 +332,7 @@ func validateConfig(cfg *Config) error {
 				}
 				host.KeyFile = keyPath
 			}
-			
+
 			// 設定遠端模式預設值
 			if host.Port == 0 {
 				host.Port = defaultValues.Host.Port
@@ -339,7 +346,7 @@ func validateConfig(cfg *Config) error {
 		if host.RemoteBinaryName == "" {
 			host.RemoteBinaryName = defaultValues.Host.RemoteBinaryName
 		}
-		
+
 		// 設定 Docker 命令預設值
 		if host.DockerCommand == "" {
 			host.DockerCommand = defaultValues.Host.DockerCommand
@@ -347,20 +354,44 @@ func validateConfig(cfg *Config) error {
 		if host.DockerComposeCommand == "" {
 			host.DockerComposeCommand = defaultValues.Host.DockerComposeCommand
 		}
-		
-		// 驗證該主機的專案
-		if len(host.Projects) == 0 {
-			return fmt.Errorf("host '%s': 必須至少定義一個 project", name)
+
+		// 確保 Projects map 存在
+		if host.Projects == nil {
+			host.Projects = make(map[string]Project)
 		}
-		
+
 		for projName, proj := range host.Projects {
-			if proj.ComposeDir == "" {
-				return fmt.Errorf("host '%s', project '%s': compose_dir 為必要配置", name, projName)
+			if proj.Type == "" {
+				proj.Type = ProjectTypeCompose
+			}
+			switch proj.Type {
+			case ProjectTypeCompose:
+				if proj.ComposeDir == "" {
+					return fmt.Errorf("host '%s', project '%s': compose_dir 為必要配置", name, projName)
+				}
+			case ProjectTypeContainer:
+				// container 模式不需要 compose_dir，亦不再接受額外容器名稱
+			default:
+				return fmt.Errorf("host '%s', project '%s': type 必須是 'compose' 或 'container'", name, projName)
+			}
+
+			if proj.Name == "" {
+				proj.Name = projName
+			}
+
+			host.Projects[projName] = proj
+		}
+
+		// 為每個 host 追加預設的 container 專案，方便直接操作現有容器
+		if _, exists := host.Projects[defaultContainerProjectID]; !exists {
+			host.Projects[defaultContainerProjectID] = Project{
+				Name: "Docker Container",
+				Type: ProjectTypeContainer,
 			}
 		}
-		
+
 		cfg.Hosts[name] = host
 	}
-	
+
 	return nil
 }

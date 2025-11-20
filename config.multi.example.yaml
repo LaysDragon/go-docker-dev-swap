@@ -83,10 +83,12 @@ hosts:
     projects:
       microservices-app:
         name: "微服務應用"
+        type: "compose"
         compose_dir: "/opt/microservices/app"
       
       data-pipeline:
         name: "數據處理流水線"
+        type: "compose"
         compose_dir: "/opt/data-pipeline"
 
   # 主機 2: 測試環境（使用 SSH 金鑰）
@@ -107,6 +109,7 @@ hosts:
     projects:
       test-environment:
         name: "測試環境"
+        type: "compose"
         compose_dir: "/home/tester/test-app"
 
   # 主機 3: 本地 Docker
@@ -123,11 +126,15 @@ hosts:
     projects:
       local-dev:
         name: "本地開發專案"
+        type: "compose"
         compose_dir: "/home/user/projects/app"
       
       local-test:
         name: "本地測試"
+        type: "compose"
         compose_dir: "/home/user/projects/test"
+
+    # (未顯示) 每個 host 會自動獲得一個名稱為 "Docker Container" 的 container project，可直接針對現有容器操作。
 
 # ============================================
 # 配置結構說明

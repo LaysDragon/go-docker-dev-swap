@@ -10,8 +10,8 @@ import (
 )
 
 type Manager struct {
-	executor executor.Executor
-	config   *config.RuntimeConfig
+	executor   executor.Executor
+	config     *config.RuntimeConfig
 	cmdBuilder *CommandBuilder
 }
 
@@ -41,16 +41,25 @@ func NewManager(exec executor.Executor, rc *config.RuntimeConfig) *Manager {
 }
 
 func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, error) {
-	// 獲取容器 ID
-	cmd := m.cmdBuilder.DockerCompose(m.config.Project.ComposeDir, "ps", "-q", serviceName, "-a")
-	containerID, err := m.executor.Execute(cmd)
-	if err != nil {
-		return nil, fmt.Errorf("獲取容器 ID 失敗: %w", err)
+	var inspectTarget string
+
+	if m.config.Project.Type == config.ProjectTypeContainer {
+		inspectTarget = serviceName
+	} else {
+		cmd := m.cmdBuilder.DockerCompose(m.config.Project.ComposeDir, "ps", "-q", serviceName, "-a")
+		containerID, err := m.executor.Execute(cmd)
+		if err != nil {
+			return nil, fmt.Errorf("獲取容器 ID 失敗: %w", err)
+		}
+		inspectTarget = strings.TrimSpace(containerID)
 	}
-	containerID = strings.TrimSpace(containerID)
+
+	if inspectTarget == "" {
+		return nil, fmt.Errorf("找不到容器")
+	}
 
 	// 獲取容器詳細資訊
-	cmd = m.cmdBuilder.Docker("inspect", containerID)
+	cmd := m.cmdBuilder.Docker("inspect", inspectTarget)
 	output, err := m.executor.Execute(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("獲取容器資訊失敗: %w", err)
@@ -127,6 +136,12 @@ func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, erro
 }
 
 func (m *Manager) StopContainer(serviceName string) error {
+	if m.config.Project.Type == config.ProjectTypeContainer {
+		cmd := m.cmdBuilder.Docker("stop", serviceName)
+		_, err := m.executor.Execute(cmd)
+		return err
+	}
+
 	cmd := m.cmdBuilder.DockerCompose(m.config.Project.ComposeDir, "stop", serviceName)
 	_, err := m.executor.Execute(cmd)
 	return err
@@ -310,6 +325,12 @@ func (m *Manager) RemoveDevContainer(name string) error {
 }
 
 func (m *Manager) RestoreOriginalContainer(serviceName string) error {
+	if m.config.Project.Type == config.ProjectTypeContainer {
+		cmd := m.cmdBuilder.Docker("start", serviceName)
+		_, err := m.executor.Execute(cmd)
+		return err
+	}
+
 	cmd := m.cmdBuilder.DockerCompose(m.config.Project.ComposeDir, "start", serviceName)
 	_, err := m.executor.Execute(cmd)
 	return err
@@ -322,7 +343,7 @@ func (m *Manager) CheckContainerRunning(containerName string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("檢查容器運行狀態失敗: %w", err)
 	}
-	
+
 	containerID := strings.TrimSpace(output)
 	return containerID != "", nil
 }

@@ -50,6 +50,11 @@ func main() {
 	log.Printf("本地組件: %s", runtimeCfg.Component.Name)
 	if runtimeCfg.Mode == "remote" {
 		log.Printf("遠端主機: %s (%s@%s)", runtimeCfg.Host.Name, runtimeCfg.Host.User, runtimeCfg.Host.Host)
+	}
+
+	if runtimeCfg.Project.Type == config.ProjectTypeContainer {
+		log.Printf("目標容器: %s", runtimeCfg.Component.TargetService)
+	} else {
 		log.Printf("專案位置: %s", runtimeCfg.Project.ComposeDir)
 	}
 	log.Printf("目標服務: %s", runtimeCfg.Component.TargetService)
@@ -125,7 +130,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfi
 	if err := exec.UploadFile(rc.Component.LocalBinary, rc.GetRemoteBinaryPath()); err != nil {
 		return fmt.Errorf("上傳執行檔失敗: %w", err)
 	}
-	
+
 	initialScripts := ""
 	if rc.Component.InitialScripts != nil {
 		initialScripts = *rc.Component.InitialScripts
