@@ -16,15 +16,22 @@ type Manager struct {
 }
 
 type ContainerConfig struct {
-	Name       string
-	Image      string
-	Env        []string
-	Volumes    []string
-	Ports      []string
-	Networks   []string
-	Command    string
-	WorkingDir string
-	Labels     map[string]string
+	Name         string
+	Image        string
+	Env          []string
+	Volumes      []string
+	PortBindings []PortBinding
+	Networks     []string
+	Command      string
+	WorkingDir   string
+	Labels       map[string]string
+}
+
+type PortBinding struct {
+	HostIP        string
+	HostPort      string
+	ContainerPort string
+	Protocol      string
 }
 
 type DevContainer struct {
@@ -128,6 +135,32 @@ func (m *Manager) GetContainerConfig(serviceName string) (*ContainerConfig, erro
 		if networks, ok := networkSettings["Networks"].(map[string]interface{}); ok {
 			for name := range networks {
 				cfg.Networks = append(cfg.Networks, name)
+			}
+		}
+	}
+
+	// 解析 PortBindings (HostConfig)
+	if hostConfig, ok := data["HostConfig"].(map[string]interface{}); ok {
+		if bindings, ok := hostConfig["PortBindings"].(map[string]interface{}); ok {
+			for key, bindingValue := range bindings {
+				containerPort, protocol := parsePortKey(key)
+				entries, _ := bindingValue.([]interface{})
+				for _, entry := range entries {
+					bindingMap, ok := entry.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					hostPort, _ := bindingMap["HostPort"].(string)
+					if hostPort == "" {
+						continue
+					}
+					cfg.PortBindings = append(cfg.PortBindings, PortBinding{
+						HostIP:        asString(bindingMap["HostIp"]),
+						HostPort:      hostPort,
+						ContainerPort: containerPort,
+						Protocol:      protocol,
+					})
+				}
 			}
 		}
 	}
@@ -242,6 +275,18 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, remoteDlvPath st
 	}
 
 	// 端口映射
+	for _, binding := range original.PortBindings {
+		hostSpec := binding.HostPort
+		if binding.HostIP != "" && binding.HostIP != "0.0.0.0" {
+			hostSpec = fmt.Sprintf("%s:%s", binding.HostIP, binding.HostPort)
+		}
+		containerSpec := binding.ContainerPort
+		if binding.Protocol != "" && binding.Protocol != "tcp" {
+			containerSpec = fmt.Sprintf("%s/%s", binding.ContainerPort, binding.Protocol)
+		}
+		cmdParts = append(cmdParts, fmt.Sprintf("-p %s:%s", hostSpec, containerSpec))
+	}
+
 	if m.config.Component.DlvConfig != nil && m.config.Component.DlvConfig.Enabled {
 		cmdParts = append(cmdParts, fmt.Sprintf("-p %d:%d",
 			m.config.Component.DlvConfig.Port, m.config.Component.DlvConfig.Port))
@@ -346,4 +391,21 @@ func (m *Manager) CheckContainerRunning(containerName string) (bool, error) {
 
 	containerID := strings.TrimSpace(output)
 	return containerID != "", nil
+}
+
+func parsePortKey(key string) (containerPort string, protocol string) {
+	parts := strings.Split(key, "/")
+	containerPort = parts[0]
+	protocol = "tcp"
+	if len(parts) > 1 && parts[1] != "" {
+		protocol = parts[1]
+	}
+	return
+}
+
+func asString(value interface{}) string {
+	if s, ok := value.(string); ok {
+		return s
+	}
+	return ""
 }
