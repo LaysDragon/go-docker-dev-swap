@@ -248,6 +248,7 @@ func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfi
 
 	// 確保退出時清理開發容器
 	defer func() {
+		log.SetOutput(os.Stderr)
 		log.Println("清理開發容器...")
 		if err := dockerMgr.RemoveDevContainer(devContainer.Name); err != nil {
 			log.Printf("清理開發容器失敗: %v", err)

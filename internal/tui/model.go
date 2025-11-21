@@ -39,7 +39,7 @@ type debuggerStateMsg struct {
 var (
 	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
 	panelStyle = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1)
-	keyStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("60")).Padding(0, 1)
+	keyStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("60"))
 )
 
 func newModel(opts modelOptions) model {
@@ -119,11 +119,11 @@ func (m model) renderPanel(title string, lines []string, height int) string {
 	if height < 3 {
 		height = 3
 	}
-	bodyLines := lastLines(lines, height-1)
+	bodyLines := lastLines(lines, height-3)
 	body := strings.Join(bodyLines, "\n")
 
 	titleView := titleStyle.Render(title)
-	panelView := panelStyle.Width(m.width).Height(height).Render(body)
+	panelView := panelStyle.Width(m.width - 2).MaxWidth(m.width).Height(height - 3).MaxHeight(height - 1).Render(body)
 	return lipgloss.JoinVertical(lipgloss.Left, titleView, panelView)
 }
 
@@ -135,11 +135,15 @@ func (m model) renderKeyRow() string {
 		state = "ON"
 	}
 	stateView := lipgloss.NewStyle().Bold(true).Foreground(statusColor).Render(state)
-	info := fmt.Sprintf("[D] Debugger %s   [Ctrl+C] 退出", stateView)
+	//lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("60"))
+	info := fmt.Sprintf("[D] Debugger %s", stateView)
+	otherInfo := "   [Ctrl+C] 退出"
+
 	if m.statusMessage != "" {
-		info = fmt.Sprintf("%s  •  %s", info, m.statusMessage)
+		otherInfo = fmt.Sprintf("%s  •  %s", otherInfo, m.statusMessage)
 	}
-	return keyStyle.Width(m.width).Render(info)
+	info = info + keyStyle.Render(otherInfo)
+	return keyStyle.Width(m.width).Padding(0, 1).Render(info)
 }
 
 func (m model) sendAction(a Action) {
