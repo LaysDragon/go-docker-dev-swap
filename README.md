@@ -1,26 +1,24 @@
 # docker-dev-swap
 
-一個用於微服務開發的容器替換調試工具，支持遠端 Docker Compose 環境的快速開發和調試。
-
-## 使用情景
-接手大型遠古微服務專案，重建完整的遠端編譯環境不夠方便，私有庫認證、依賴同步等問題層出不窮。直接端口轉發也不適用，因為這些微服務通過共享掛載目錄緊密耦合。
-
-本工具採用另一種方案：本地快速編譯後，將執行檔和調試器上傳至測試伺服器，動態替換目標容器並啟動 Delve debugger，透過 SSH tunnel 實現遠端調試。退出時自動恢復原始環境。
+一個用於微服務開發的容器替換調試工具，支持遠端 Docker 容器與 Compose 環境的快速開發和調試。  
+將本地編譯執行檔和調試器上傳至測試伺服器，動態替換目標容器並啟動 Delve debugger，透過 SSH tunnel 實現遠端調試。退出時自動恢復原始環境。
+僅支持 linux，windows 上請使用 wsl。
 
 **跨平台編譯注意事項：**
-- 不同環境編譯可能存在動態庫依賴問題，建議使用相同環境編譯或在 `initial_scripts` 中安裝必要依賴
-- Delve 需要自行提供，可複製本地安裝版本或指定路徑。目標容器如內建 dlv 更佳，但仍需注意依賴問題
-- 範例：本地 WSL Ubuntu + 目標 Alpine 容器，只需通過 `initial_scripts` 配置在容器中執行 `apk add --no-cache libc6-compat` 即可解決依賴
+- 不同環境編譯可能存在動態庫依賴問題，建議使用相同環境編譯或在 `initial_scripts` 中安裝必要依賴。
+- Delve 需自行提供，可複製本地安裝版本或指定路徑，需注意依賴問題。目標容器如內建 dlv 更佳。
+ 
+> 範例：本地 WSL Ubuntu + 目標 Alpine 容器。  
+> 只需在 `initial_scripts` 配置 `apk add --no-cache libc6-compat` 即可處理缺少動態庫的錯誤。
 
 ## 功能特性
 
 - 🔄 **容器替換**: 自動停止原始容器，建立配置相同的開發容器
+- 🏠 **雙模式支持**: 支持本地和遠端兩種執行模式，靈活切換
 - 🐛 **遠端調試**: 提供 SSH tunnel 連接在本地上暴露 Delve debugger 端口
 - 📦 **自動部署**: 監控本地檔案，自動上傳並重啟容器
 - 🧹 **自動清理**: 退出時自動清理開發容器並恢復原始服務
-- 🔌 **SSH 管理**: 內建 SSH 和 SFTP 支持，無需額外工具
-- 🏠 **雙模式支持**: 支持本地和遠端兩種執行模式，靈活切換（參見 [MODES.md](docs/MODES.md)）
-- 📝 **日誌監控**: 實時監控容器日誌，可選寫入本地文件（參見 [LOGGING.md](docs/LOGGING.md)）
+- 📝 **日誌監控**: 實時監控容器日誌，可選寫入本地文件
 
 ## 安裝
 
@@ -32,42 +30,58 @@ go install github.com/laysdragon/go-docker-dev-swap@latest
 
 ```bash
 git clone https://github.com/laysdragon/go-docker-dev-swap.git
-cd docker-dev-swap
-go build -o docker-dev-swap ./cmd/docker-dev-swap
+cd go-docker-dev-swap
+go build -o go-docker-dev-swap ./cmd/go-docker-dev-swap
 ```
 
 ## 使用方法
 
 ### 1. 建立配置檔案
 
-複製 `config.example.yaml` 為 `config.yaml` 並修改:
+複製 `config.example.yaml` 為 `config.yaml` 並依需求新增 **components / hosts / projects**：
 
-**遠端模式（默認）:**
 ```yaml
-mode: "remote"  # 可省略，默認為 remote
+log_file: ""
+dlv_config:
+  enabled: true
+  port: 2345
 
-remote_host:
-  host: "your-server.com"
-  user: "developer"
-  password: "your-password"
+components:
+  api-service:
+    name: "API"
+    local_binary: "./bin/api"
+    target_service: "api"
+    container_binary_path: "/app/api"
 
-compose_dir: "/path/to/docker-compose"
-target_service: "your-service"
-local_binary: "./bin/your-app"
-container_binary_path: "/app/your-app"
+hosts:
+  dev-server:
+    name: "DEV"
+    mode: "remote"
+    host: "your-server.com"
+    user: "developer"
+    password: "your-password"      # 或 key_file
+    remote_work_dir: "/tmp/dev"
+    projects:
+      main-compose:
+        name: "Compose"
+        type: "compose"
+        compose_dir: "/path/to/docker-compose"
+
+  local-docker:
+    name: "Local"
+    mode: "local"                  # 本地執行不需要 SSH 欄位
+    projects:
+      playground:
+        type: "compose"
+        compose_dir: "./deploy"
 ```
 
-**本地模式:**
-```yaml
-mode: "local"  # 本地執行，不需要 SSH
+- Component 配置「要替換的目標服務容器與本地編譯的組件執行檔」。
+- Host 描述執行環境（`mode` 可為 `remote` 或 `local`）以及在該環境可用的專案選項。
+- Project 可為 `type=compose` 或 `type=container`。
+- 啟動程式後，會依序互動式選擇 component → host → project；若某步只有單一選項會自動略過。
 
-compose_dir: "/path/to/docker-compose"
-target_service: "your-service"
-local_binary: "./bin/your-app"
-container_binary_path: "/app/your-app"
-```
-
-> 詳細模式說明請參考 [MODES.md](docs/MODES.md)
+> 完整欄位說明請參考 [CONFIG.md](docs/CONFIG.md)，模式細節請參考 [MODES.md](docs/MODES.md)。
 
 ### 2. 編譯你的 Go 應用
 
@@ -80,13 +94,7 @@ go build -gcflags="all=-N -l" -o ./bin/your-app ./cmd/your-app
 ### 3. 啟動開發環境
 
 ```bash
-docker-dev-swap -config config.yaml
-```
-
-或指定特定服務:
-
-```bash
-docker-dev-swap -config config.yaml -service api-service
+go-docker-dev-swap
 ```
 
 ### 4. 連接 Debugger
@@ -120,16 +128,11 @@ docker-dev-swap -config config.yaml -service api-service
 
 1. 修改代碼
 2. 在本地編譯: `go build -gcflags="all=-N -l" -o ./bin/your-app`
-3. 工具自動偵測並上傳新執行檔
-4. 容器自動重啟
-5. Debugger 重新連接
+3. 工具自動偵測並上傳新執行檔，並重啟容器
 
 ### 6. 退出
 
-按 `Ctrl+C` 退出，工具會自動:
-- 停止並刪除開發容器
-- 恢復原始容器
-- 關閉 SSH tunnel
+按 `Ctrl+C` 退出，工具會自動清理暫時性容器並恢復原始容器服務:
 
 ## 進階配置
 
@@ -145,12 +148,18 @@ dlv_config:
 
 ### 使用 SSH 金鑰認證
 
+在對應的 host 區塊中提供 `key_file` 即可：
+
 ```yaml
-remote_host:
-  host: "your-server.com"
-  user: "developer"
-  key_file: "/home/user/.ssh/id_rsa"
-  # 註解掉 password
+hosts:
+  dev-server:
+    mode: "remote"
+    host: "your-server.com"
+    user: "developer"
+    key_file: "/home/user/.ssh/id_rsa"
+    projects:
+      main:
+        compose_dir: "/path/to/docker-compose"
 ```
 
 ## 工作原理

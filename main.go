@@ -17,8 +17,7 @@ import (
 )
 
 var (
-	configFile = flag.String("config", "config.yaml", "配置檔案路徑")
-	service    = flag.String("service", "", "目標服務名稱")
+	configFile = flag.String("config", "", "配置檔案路徑")
 )
 
 func main() {
@@ -34,11 +33,6 @@ func main() {
 	runtimeCfg, err := cfg.InteractiveSelect()
 	if err != nil {
 		log.Fatalf("選擇配置失敗: %v", err)
-	}
-
-	// 如果指定了服務名稱，覆蓋配置
-	if *service != "" {
-		runtimeCfg.Component.TargetService = *service
 	}
 
 	if runtimeCfg.Component.TargetService == "" {

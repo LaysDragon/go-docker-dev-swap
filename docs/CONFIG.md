@@ -1,135 +1,112 @@
 # 配置指南
 
-## 配置系統
-## 配置文件位置
+`docker-dev-swap` 支援「多組配置」格式。  
+每個配置檔可同時定義多個 **components**（本地組件）、**hosts**（執行節點）以及各 host 底下的 **projects**。    
+啟動程式時，會依序選擇 component → host → project，並組成執行所需的 runtime config。
 
-程序會按以下順序查找配置文件：
+## 配置檔案搜尋順序
 
-1. 命令行指定的路徑：`--config=/path/to/config.yaml`
-2. 當前目錄：`./config.yaml`
-3. 用戶主目錄：`~/.docker-dev-swap/config.yaml`
-4. 系統目錄：`/etc/docker-dev-swap/config.yaml`
+1. 指定參數：`--config=/path/to/docker-dev-swap.yaml`
+2. 當前目錄：`./docker-dev-swap.yaml`
+3. 使用者目錄：`~/.docker-dev-swap.yaml`
 
-## 配置項說明
-### 必要配置項
+## 結構概覽
 
-這些配置項必須設定，否則程序無法運行：
+```yaml
+log_file: ""             # 全域預設值（可被 component 覆寫）
+initial_scripts: ""       # 全域預設值（可被 component 覆寫）
+dlv_config: # 全域預設值（可被 component 覆寫）
+  enabled: false
+  port: 2345
+  args: ""
+  local_path: ""
 
-| 配置項 | 說明 | 範例 |
-|--------|------|------|
-| `remote_host.host` | 遠端主機地址 | `"192.168.1.100"` |
-| `remote_host.user` | SSH 用戶名 | `"developer"` |
-| `remote_host.password` 或 `remote_host.key_file` | SSH 認證（二選一） | `"password"` 或 `"~/.ssh/id_rsa"` |
-| `compose_dir` | docker-compose.yml 所在目錄 | `"/opt/app"` |
-| `target_service` | 目標服務名稱 | `"api-service"` |
-| `local_binary` | 本地二進制文件路徑 | `"./bin/app"` |
+components: { ... }      # 至少一個 component
+hosts: { ... }           # 至少一個 host，每個 host 需含 projects
+```
 
-### 可選配置項（有預設值）
+- **Component**：描述要熱替換的二進制，以及容器內對應的 service。
+- **Host**：描述要在哪裡執行（本機或遠端）、SSH / sudo / docker。
+    - **Project** 該 host 上可用的 docker-compose projects。
 
-| 配置項 | 說明 | 預設值 |
-|--------|------|--------|
-| `remote_host.port` | SSH 端口 | `22` |
-| `remote_work_dir` | 遠端工作目錄 | `"/tmp/dev-binaries"` |
-| `remote_binary_name` | 遠端執行檔名稱 | `"service"` |
-| `container_binary_path` | 容器內執行檔路徑 | `"/app/service"` |
-| `debugger_port` | 本地 debugger 端口 | `2345` |
-| `extra_ports` | 額外暴露的端口 | `[]` |
-| `initial_scripts` | 容器初始化腳本 | `""` |
-| `dlv_config.enabled` | 是否啟用 dlv | `true` |
-| `dlv_config.port` | dlv 端口 | `2345` |
-| `dlv_config.local_path` | 本地 dlv 路徑（空則自動搜尋） | `""` |
-| `dlv_config.args` | dlv 額外參數 | `""` |
-| `log_file` | 本地日誌文件路徑 | `""` (不寫入文件) |
+## Component 欄位
+通常為本地開發環境的golang程序，以及需要替換的目標容器
 
-## 環境變數支持
+| 欄位                      | 說明                                                  | 必要 | 預設值            |
+|-------------------------|-----------------------------------------------------|----|----------------|
+| `name`                  | 顯示名稱（互動選單用）                                         | 否  | key 名稱         |
+| `local_binary`          | 本地編譯好的二進制路徑                                         | ✅  | —              |
+| `target_service`        | docker-compose service 名稱                           | ✅  | —              |
+| `container_binary_path` | 容器內二進制儲存路徑                                          | 否  | `/app/service` |
+| `debugger_port`         | 用於為 Delve/debugger 暴露的本地埠建立通道，通常情況下應與 dlv_config 一致 | 否  | `2345`         |
+| `dlv_config`            | 覆蓋全域 dlv 設定                                         | 否  | 全域設定           |
+| `initial_scripts`       | 容器啟動後執行的腳本                                          | 否  | 全域設定           |
+| `log_file`              | 追加輸出的本地檔案路徑                                         | 否  | 全域設定           |
 
-所有配置項都可以通過環境變數覆蓋，使用前綴 `DDS_`（Docker Dev Swap）：
+## Host
+
+host 代表實際執行環境，可為 遠端ssh`remote` 或 本地`local`。
+
+### Host 共用欄位
+
+| 欄位                       | 說明                                            | 必要 | 預設值                 |
+|--------------------------|-----------------------------------------------|----|---------------------|
+| `name`                   | 顯示名稱                                          | 否  | key 名稱              |
+| `mode`                   | `remote` 或 `local`                            | 否  | `remote`            |
+| `remote_work_dir`        | 臨時檔案 / 程式放置路徑                                 | 否  | `/tmp/dev-binaries` |
+| `remote_binary_name`     | 上傳到 host 的檔名                                  | 否  | `service`           |
+| `use_sudo`               | 是否以 sudo 執行 docker/system 指令                  | 否  | `false`             |
+| `sudo_password`          | 是否需要填入自動 sudo 密碼（建議用環境變數 `DDS_SUDO_PASSWORD`） | 否  | `""`                |
+| `docker_command`         | docker 指令                                     | 否  | `docker`            |
+| `docker_compose_command` | docker compose 指令                             | 否  | `docker compose`    |
+
+### Host Remote 模式
+
+Remote 模式需要額外的配置
+
+| 欄位                      | 說明                          |
+|-------------------------|-----------------------------|
+| `mode`                  | 必須為`remote`                 |
+| `host`                  | SSH 目標主機，例如 `192.168.1.100` |
+| `port`                  | SSH 連接埠，預設 `22`             |
+| `user`                  | SSH 使用者                     |
+| `password` / `key_file` | 兩者擇一提供；key 會轉成絕對路徑          |
+
+### Projects
+
+每個 host 可配置該 host 上擁有的 project。  
+主要是默認的Docker容器環境以及Docker Compose專案目錄。
+
+| 欄位            | 說明                                        | 是否必填               |
+|---------------|-------------------------------------------|--------------------|
+| `name`        | 顯示名稱                                      | 否（預設為 map key）     |
+| `type`        | `compose`（預設）或 `container`                | 否                  |
+| `compose_dir` | docker-compose.yml 所在目錄（僅 `compose` 類型需要） | `type=compose` 時 ✅ |
+
+`type: container` 允許你直接指向現有的 Docker 容器，而非 docker compose 下的服務容器。
+
+- 選擇此類型後，程式會將 `target_service` 視為目標容器名稱。
+- 每台 host 默認擁有一個 key 為 `docker-container`、名稱為 **Docker Container** 的 `container` 專案。
+- 若想自訂名稱或描述，可在該 host 的 `projects` map 補上一個 `docker-container` entry 並覆蓋 `name`。
+
+## 環境變數覆蓋
+
+配置欄位都可以用 `DDS_` 前綴的環境變數覆蓋，例如：
 
 ```bash
-# 設定遠端主機
-export DDS_REMOTE_HOST_HOST="192.168.1.100"
-export DDS_REMOTE_HOST_USER="developer"
-export DDS_REMOTE_HOST_PASSWORD="secret"
-
-# 設定目標服務
-export DDS_TARGET_SERVICE="api-service"
-export DDS_COMPOSE_DIR="/opt/app"
-
-# 設定本地二進制文件
-export DDS_LOCAL_BINARY="./bin/app"
-
-# 設定 debugger 端口
-export DDS_DEBUGGER_PORT="3000"
-
-# 啟動程序
-./docker-dev-swap
+export DDS_COMPONENTS_API_LOCAL_BINARY="./bin/api"
+export DDS_HOSTS_DEV_MODE="remote"
+export DDS_HOSTS_DEV_PROJECTS_MAIN_COMPOSE_DIR="/opt/app"
 ```
 
-環境變數命名規則：
-- 使用下劃線分隔
-- 巢狀配置使用雙下劃線
-- 全部大寫
+- 使用底線分隔層級；map key 會轉成大寫（例：`components.api.local_binary` → `DDS_COMPONENTS_API_LOCAL_BINARY`）。
+- 若同時存在環境變數與配置檔，**環境變數優先**。
 
-範例：
-- `remote_host.port` → `DDS_REMOTE_HOST_PORT`
-- `dlv_config.enabled` → `DDS_DLV_CONFIG_ENABLED`
-- `extra_ports` → `DDS_EXTRA_PORTS`
+## 配置範例
+請查閱 `docker-dev-swap.example.yaml`
 
-## 最小配置範例
+## 配置優先順序
 
-只設定必要項的最小配置：
-
-```yaml
-remote_host:
-  host: "192.168.1.100"
-  user: "developer"
-  password: "your-password"
-
-compose_dir: "/opt/app"
-target_service: "api-service"
-local_binary: "./bin/app"
-```
-
-其他配置項都會使用預設值。
-
-## 完整配置範例
-
-包含所有可選項的完整配置：
-
-```yaml
-remote_host:
-  host: "192.168.1.100"
-  port: 22
-  user: "developer"
-  key_file: "~/.ssh/id_rsa"
-
-compose_dir: "/opt/microservices/my-app"
-target_service: "api-service"
-local_binary: "./bin/api-service"
-
-remote_work_dir: "/tmp/dev-binaries"
-remote_binary_name: "api-service"
-container_binary_path: "/app/api-service"
-
-debugger_port: 2345
-extra_ports:
-  - 8080
-  - 9090
-
-initial_scripts: |
-  apk add --no-cache libc6-compat
-  echo "Container initialized"
-
-dlv_config:
-  enabled: true
-  port: 2345
-  args: "--log --log-output=debugger,rpc"
-```
-
-## 配置優先級
-
-配置值的優先級（從高到低）：
-
-1. 環境變數
-2. 配置文件
-3. 預設值
+1. 環境變數 (`DDS_`)
+2. 配置檔內容
+3. 內建預設值（程式碼中的 defaultValues）

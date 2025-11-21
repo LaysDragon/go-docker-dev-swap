@@ -115,7 +115,7 @@ var defaultValues = struct {
 	Component struct {
 		ContainerBinaryPath string
 		DebuggerPort        int
-		ExtraPorts          []int
+		//ExtraPorts          []int
 	}
 
 	// Host 預設值
@@ -149,11 +149,11 @@ var defaultValues = struct {
 	Component: struct {
 		ContainerBinaryPath string
 		DebuggerPort        int
-		ExtraPorts          []int
+		//ExtraPorts          []int
 	}{
 		ContainerBinaryPath: "/app/service",
 		DebuggerPort:        2345,
-		ExtraPorts:          []int{},
+		//ExtraPorts:          []int{},
 	},
 
 	// Host 預設值
@@ -213,11 +213,10 @@ func Load(path string) (*Config, error) {
 	if path != "" {
 		v.SetConfigFile(path)
 	} else {
-		v.SetConfigName("config")
+		v.SetConfigName("docker-dev-swap")
 		v.SetConfigType("yaml")
 		v.AddConfigPath(".")
-		v.AddConfigPath("$HOME/.docker-dev-swap")
-		v.AddConfigPath("/etc/docker-dev-swap")
+		v.AddConfigPath("$HOME")
 	}
 
 	// 讀取環境變數 (前綴為 DDS_)
@@ -292,9 +291,9 @@ func validateConfig(cfg *Config) error {
 		if comp.DebuggerPort == 0 {
 			comp.DebuggerPort = defaultValues.Component.DebuggerPort
 		}
-		if comp.ExtraPorts == nil {
-			comp.ExtraPorts = defaultValues.Component.ExtraPorts
-		}
+		//if comp.ExtraPorts == nil {
+		//	comp.ExtraPorts = defaultValues.Component.ExtraPorts
+		//}
 
 		// LogFile, InitialScripts, DlvConfig 如果為 nil，表示使用全局預設值
 		// 在 InteractiveSelect 時會處理合併邏輯

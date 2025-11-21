@@ -1,7 +1,7 @@
 #############################################
-# Docker Dev Swap 多組配置範例（精簡版）
+# Docker Dev Swap 多組配置範例
 # -----------------------------------------
-# 複製為 config.yaml 並依實際環境調整
+# 複製為 docker-dev-swap.yaml 並依實際環境調整
 #############################################
 
 # 全域預設值（可被 component 覆蓋）
@@ -20,14 +20,12 @@ components:
     target_service: "api"
     container_binary_path: "/app/api"
     debugger_port: 2345
-    extra_ports:
-      - 8080
 
   worker-service:
     name: "Worker"
     local_binary: "./bin/worker"
     target_service: "worker"
-    debugger_port: 2346
+    debugger_port: 4000
     dlv_config:
       enabled: true
       port: 4000
@@ -63,7 +61,7 @@ hosts:
 
 #############################################
 # 使用說明
-# - 執行 `docker-dev-swap --config ./config.yaml`
+# - docker-dev-swap.yaml 位於當前工作目錄
+# - 執行 `docker-dev-swap`
 # - 依序選擇 component → host → project
-# - 每台 host 會自動新增名為 "Docker Container" 的 `container` 專案，會以 component 的 `target_service` / `--service` 參數作為容器名稱
 #############################################

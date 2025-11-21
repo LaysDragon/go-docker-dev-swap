@@ -291,9 +291,9 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, remoteDlvPath st
 		cmdParts = append(cmdParts, fmt.Sprintf("-p %d:%d",
 			m.config.Component.DlvConfig.Port, m.config.Component.DlvConfig.Port))
 	}
-	for _, port := range m.config.Component.ExtraPorts {
-		cmdParts = append(cmdParts, fmt.Sprintf("-p %d:%d", port, port))
-	}
+	//for _, port := range m.config.Component.ExtraPorts {
+	//	cmdParts = append(cmdParts, fmt.Sprintf("-p %d:%d", port, port))
+	//}
 
 	// 網路
 	for _, network := range original.Networks {
