@@ -23,22 +23,24 @@ type LogFollower struct {
 	logFile       *os.File
 	enableFile    bool
 	logFilePath   string
+	lineHandler   func(string)
 }
 
 // NewLogFollower 創建日誌監控器
-func NewLogFollower(exec executor.Executor, manager *Manager, containerName string, rc *config.RuntimeConfig) *LogFollower {
+func NewLogFollower(exec executor.Executor, manager *Manager, containerName string, rc *config.RuntimeConfig, handler func(string)) *LogFollower {
 	return &LogFollower{
 		executor:      exec,
 		manager:       manager,
 		cmdBuilder:    NewCommandBuilder(rc),
 		containerName: containerName,
 		enableFile:    rc.Component.LogFile != nil && *rc.Component.LogFile != "",
-		logFilePath:   func() string {
+		logFilePath: func() string {
 			if rc.Component.LogFile != nil {
 				return *rc.Component.LogFile
 			}
 			return ""
 		}(),
+		lineHandler: handler,
 	}
 }
 
@@ -144,8 +146,11 @@ func (lf *LogFollower) streamLogs(ctx context.Context, stdout io.Reader, session
 
 // processLogLine 處理單行日誌
 func (lf *LogFollower) processLogLine(line string) {
-	// 輸出到控制台
-	fmt.Println(line)
+	if lf.lineHandler != nil {
+		lf.lineHandler(line)
+	} else {
+		fmt.Println(line)
+	}
 
 	// 寫入文件（如果啟用）
 	if lf.enableFile && lf.logFile != nil {

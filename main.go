@@ -2,22 +2,26 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/laysdragon/go-docker-dev-swap/internal/config"
 	"github.com/laysdragon/go-docker-dev-swap/internal/docker"
 	"github.com/laysdragon/go-docker-dev-swap/internal/executor"
 	"github.com/laysdragon/go-docker-dev-swap/internal/local"
+	"github.com/laysdragon/go-docker-dev-swap/internal/tui"
 )
 
 var (
 	configFile = flag.String("config", "", "配置檔案路徑")
+	enableTUI  = flag.Bool("tui", false, "啟用 TUI 模式（實驗性）")
 )
 
 func main() {
@@ -53,6 +57,11 @@ func main() {
 	}
 	log.Printf("目標服務: %s", runtimeCfg.Component.TargetService)
 
+	// 確保 DlvConfig 存在，方便後續動態切換
+	if runtimeCfg.Component.DlvConfig == nil {
+		runtimeCfg.Component.DlvConfig = &config.DlvConfig{}
+	}
+
 	// 建立 Executor
 	exec, err := executor.NewExecutor(runtimeCfg)
 	if err != nil {
@@ -77,15 +86,67 @@ func main() {
 		cancel()
 	}()
 
-	// 執行主要工作流程
-	if err := run(ctx, dockerMgr, runtimeCfg, exec); err != nil {
-		log.Fatalf("執行失敗: %v", err)
+	runOpts := runOptions{
+		Cancel: cancel,
+	}
+
+	var (
+		uiManager *tui.Manager
+		uiErrCh   chan error
+	)
+
+	if *enableTUI {
+		uiManager = tui.NewManager(tui.Options{
+			InitialDebuggerEnabled: runtimeCfg.Component.DlvConfig.Enabled,
+		})
+
+		log.SetOutput(uiManager.WorkLogWriter())
+
+		runOpts.ContainerLogHandler = uiManager.PublishContainerLog
+		runOpts.ActionChan = uiManager.Actions()
+		runOpts.UpdateDebuggerState = uiManager.UpdateDebuggerState
+		runOpts.AutoConfirmPrompts = true
+
+		uiErrCh = make(chan error, 1)
+		go func() {
+			uiErrCh <- uiManager.Start(ctx)
+		}()
+	}
+
+	runErr := run(ctx, dockerMgr, runtimeCfg, exec, runOpts)
+	cancel()
+
+	if uiManager != nil {
+		if err := <-uiErrCh; err != nil && !errors.Is(err, context.Canceled) {
+			log.Printf("TUI 結束: %v", err)
+		}
+	}
+
+	if runErr != nil {
+		log.Fatalf("執行失敗: %v", runErr)
 	}
 
 	log.Println("已完成清理，程序退出")
 }
 
-func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfig, exec executor.Executor) error {
+type runOptions struct {
+	ContainerLogHandler func(string)
+	ActionChan          <-chan tui.Action
+	AutoConfirmPrompts  bool
+	UpdateDebuggerState func(bool)
+	Cancel              context.CancelFunc
+}
+
+func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfig, exec executor.Executor, opts runOptions) error {
+	var containerLock sync.Mutex
+
+	if rc.Component.DlvConfig == nil {
+		rc.Component.DlvConfig = &config.DlvConfig{}
+	}
+	if opts.UpdateDebuggerState != nil {
+		opts.UpdateDebuggerState(rc.Component.DlvConfig.Enabled)
+	}
+
 	// 1. 獲取原始容器配置
 	log.Println("獲取原始容器配置...")
 	originalContainer, err := dockerMgr.GetContainerConfig(rc.Component.TargetService)
@@ -156,12 +217,15 @@ func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfi
 		// 檢查是否為容器名稱衝突錯誤
 		if strings.Contains(err.Error(), "發現殘留的開發容器") {
 			log.Println("發現殘留的開發容器")
-			log.Print("是否要清理殘留容器？(y/N): ")
+			shouldClean := opts.AutoConfirmPrompts
+			if !shouldClean {
+				log.Print("是否要清理殘留容器？(y/N): ")
+				var response string
+				fmt.Scanln(&response)
+				shouldClean = strings.ToLower(strings.TrimSpace(response)) == "y"
+			}
 
-			var response string
-			fmt.Scanln(&response)
-
-			if strings.ToLower(strings.TrimSpace(response)) == "y" {
+			if shouldClean {
 				log.Println("清理殘留容器...")
 				if err := dockerMgr.RemoveDevContainerIfExists(rc.GetDevContainerName()); err != nil {
 					return fmt.Errorf("清理殘留容器失敗: %w", err)
@@ -215,6 +279,9 @@ func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfi
 	// 8. 啟動檔案監控
 	log.Println("啟動檔案監控...")
 	fileWatcher := local.NewFileWatcher(rc.Component.LocalBinary, func(path string) {
+		containerLock.Lock()
+		defer containerLock.Unlock()
+
 		log.Printf("偵測到檔案更新: %s", path)
 
 		// 上傳新檔案
@@ -261,13 +328,79 @@ func run(ctx context.Context, dockerMgr *docker.Manager, rc *config.RuntimeConfi
 		return fmt.Errorf("啟動檔案監控失敗: %w", err)
 	}
 
+	toggleDebugger := func(enabled bool) error {
+		if rc.Component.DlvConfig.Enabled == enabled {
+			state := "關閉"
+			if enabled {
+				state = "開啟"
+			}
+			log.Printf("Debugger 已處於%s狀態", state)
+			return nil
+		}
+
+		state := "關閉"
+		if enabled {
+			state = "開啟"
+		}
+		log.Printf("切換 debugger 為%s...", state)
+		rc.Component.DlvConfig.Enabled = enabled
+		log.Println("重新建立開發容器以套用 debugger 設定...")
+
+		if err := dockerMgr.RemoveDevContainer(devContainer.Name); err != nil {
+			return fmt.Errorf("移除容器失敗: %w", err)
+		}
+
+		newDevContainer, err := dockerMgr.CreateDevContainer(originalContainer, remoteDlvPath)
+		if err != nil {
+			return fmt.Errorf("重新建立容器失敗: %w", err)
+		}
+		devContainer = newDevContainer
+
+		if err := dockerMgr.StartContainer(devContainer.Name); err != nil {
+			return fmt.Errorf("啟動容器失敗: %w", err)
+		}
+
+		log.Println("Debugger 模式已更新並重新啟動容器")
+		return nil
+	}
+
+	if opts.ActionChan != nil {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case action := <-opts.ActionChan:
+					switch action.Type {
+					case tui.ActionToggleDebugger:
+						containerLock.Lock()
+						err := toggleDebugger(action.Enabled)
+						containerLock.Unlock()
+						if err != nil {
+							log.Printf("切換 debugger 失敗: %v", err)
+							if opts.UpdateDebuggerState != nil {
+								opts.UpdateDebuggerState(rc.Component.DlvConfig.Enabled)
+							}
+						} else if opts.UpdateDebuggerState != nil {
+							opts.UpdateDebuggerState(action.Enabled)
+						}
+					case tui.ActionQuit:
+						if opts.Cancel != nil {
+							opts.Cancel()
+						}
+					}
+				}
+			}
+		}()
+	}
+
 	// 9. 啟動日誌監控
 	log.Println("啟動容器日誌監控...")
 	if rc.Component.LogFile != nil && *rc.Component.LogFile != "" {
 		log.Printf("日誌將寫入文件: %s", *rc.Component.LogFile)
 	}
 
-	logFollower := docker.NewLogFollower(exec, dockerMgr, devContainer.Name, rc)
+	logFollower := docker.NewLogFollower(exec, dockerMgr, devContainer.Name, rc, opts.ContainerLogHandler)
 	go func() {
 		if err := logFollower.Start(ctx); err != nil && err != context.Canceled {
 			log.Printf("日誌監控停止: %v", err)

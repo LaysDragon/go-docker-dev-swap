@@ -3,6 +3,7 @@ package executor
 import (
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -92,7 +93,7 @@ func (c *SSHClient) Execute(command string) (string, error) {
 
 	output, err := session.CombinedOutput(command)
 	if err != nil {
-		return string(output),fmt.Errorf("執行命令失敗: %w (%s)=>(%s)", err, command,output)
+		return string(output), fmt.Errorf("執行命令失敗: %w (%s)=>(%s)", err, command, output)
 	}
 
 	return string(output), nil
@@ -168,11 +169,11 @@ func (c *SSHClient) CreateTunnel(localPort, remotePort int) (*Tunnel, error) {
 			if err != nil {
 				return
 			}
-			fmt.Printf("接受本地連接: %s\n", localConn.RemoteAddr().String())
+			log.Printf("接受本地連接: %s", localConn.RemoteAddr().String())
 
 			go func(local net.Conn) {
 				defer local.Close()
-				defer fmt.Printf("關閉本地連接: %s\n", local.RemoteAddr().String())
+				defer log.Printf("關閉本地連接: %s", local.RemoteAddr().String())
 
 				remote, err := c.client.Dial("tcp", fmt.Sprintf("localhost:%d", remotePort))
 				if err != nil {

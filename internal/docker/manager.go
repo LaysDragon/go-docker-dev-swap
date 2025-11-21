@@ -3,6 +3,7 @@ package docker
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/laysdragon/go-docker-dev-swap/internal/config"
@@ -339,7 +340,7 @@ func (m *Manager) CreateDevContainer(original *ContainerConfig, remoteDlvPath st
 
 	// 使用 CommandBuilder 構建完整的 docker 命令
 	cmd := m.cmdBuilder.Docker(cmdParts...)
-	fmt.Printf("執行命令: %s\n", cmd)
+	log.Printf("執行命令: %s", cmd)
 	output, err := m.executor.Execute(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("建立開發容器失敗: %w, output: %s", err, output)
